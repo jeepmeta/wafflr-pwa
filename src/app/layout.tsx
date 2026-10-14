@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, Inter } from "next/font/google";
+import { AppHeader } from "@/components/layout/AppHeader";
 import "./App.css";
 
 const inter = Inter({
@@ -16,20 +17,16 @@ const fredoka = Fredoka({
 });
 
 export const metadata: Metadata = {
-  title: "Wafflr — Decide faster",
+  title: "Wafflr — Stop waffling. Start living.",
   description:
-    "Sleek, gamified decision-making. Where to eat, what to watch — fair, fun, done in under a minute.",
+    "Mobile-first swipe-tournament decision engine. Fair, fast, and fun for groups.",
   applicationName: "Wafflr",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "Wafflr",
   },
   formatDetection: { telephone: false },
-  icons: {
-    icon: "/favicon.png",
-    apple: "/icon-192.png",
-  },
   manifest: "/manifest.json",
 };
 
@@ -38,26 +35,24 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0F172A" },
-    { media: "(prefers-color-scheme: light)", color: "#F8FAFC" },
-  ],
+  themeColor: "#FFFBEB",
   viewportFit: "cover",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" data-theme="dark" className={`${inter.variable} ${fredoka.variable}`}>
+    <html lang="en" className={`${inter.variable} ${fredoka.variable}`}>
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="min-h-dvh antialiased">
-        {children}
+      <body>
+        <div className="app-shell">
+          <AppHeader />
+          <main className="app-main">{children}</main>
+        </div>
       </body>
     </html>
   );

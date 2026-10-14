@@ -1,45 +1,63 @@
-import { WafflrMark, WafflrWordmark } from "@/components/WafflrMark";
-import { ModeCard } from "@/components/home/ModeCard";
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
 
 export default function HomePage() {
+  const [wink, setWink] = useState(false);
+
+  function onButtersTap() {
+    setWink(true);
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(12);
+    }
+    setTimeout(() => setWink(false), 450);
+  }
+
   return (
-    <main className="min-h-dvh flex flex-col">
-      {/* Hero */}
-      <header className="screen-pad pt-10 pb-8 flex flex-col items-center text-center gap-4">
-        <div className="flex items-center gap-3">
-          <WafflrMark size={56} />
-          <WafflrWordmark className="text-3xl" />
-        </div>
-        <p className="text-[var(--wafflr-fg-secondary)] text-base max-w-xs leading-relaxed">
-          Decide faster. Fair, fun, and done in under a minute.
-        </p>
-      </header>
+    <div className="flex flex-col items-center justify-center flex-1 screen-pad pb-8">
+      <button
+        type="button"
+        onClick={onButtersTap}
+        className="relative mb-4 border-0 bg-transparent cursor-pointer p-0"
+        aria-label="Butters the Waffle"
+      >
+        <div
+          className="char-frame transition-transform duration-300"
+          style={{
+            width: 180,
+            height: 180,
+            backgroundImage: wink
+              ? "url(/characters/butters/wink-sheet.svg)"
+              : "url(/characters/butters/hero.svg)",
+            backgroundSize: wink ? "720px 180px" : "contain",
+            animation: wink ? "wink 0.4s steps(4) forwards" : undefined,
+          }}
+        />
+        <style jsx>{`
+          @keyframes wink {
+            to {
+              background-position: -720px center;
+            }
+          }
+        `}</style>
+      </button>
 
-      {/* Mode grid — extensible templates */}
-      <section className="screen-pad flex-1 pb-12">
-        <h1 className="sr-only">Choose a decision mode</h1>
-        <div className="grid grid-cols-1 gap-4 max-w-md mx-auto">
-          <ModeCard
-            href="/eat"
-            emoji="🍽️"
-            title="Where to eat"
-            description="Pick dinner without the debate"
-            accent="primary"
-          />
-          <ModeCard
-            href="/watch"
-            emoji="🎬"
-            title="What to watch"
-            description="Movie night, no veto wars"
-            accent="accent"
-          />
-          {/* Future templates slot here — same ModeCard + catalog pattern */}
-        </div>
+      <h1 className="font-display font-bold text-4xl tracking-tight text-obsidian mb-1">
+        Wafflr
+      </h1>
+      <p className="text-muted text-center mb-8 max-w-xs">
+        Stop waffling. Start living.
+      </p>
 
-        <p className="mt-10 text-center text-xs text-[var(--wafflr-fg-tertiary)]">
-          Solo wheel · more modes coming
-        </p>
-      </section>
-    </main>
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <Link href="/create" className="btn-primary no-underline w-full">
+          Create Room
+        </Link>
+        <Link href="/join" className="btn-secondary no-underline w-full">
+          Join Room
+        </Link>
+      </div>
+    </div>
   );
 }

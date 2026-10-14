@@ -21,6 +21,7 @@ import {
   remoteGetByCode,
   remoteJoinRoom,
   remoteSetReady,
+  remoteSetStatus,
   subscribeRoom,
   type Participant,
 } from "@/lib/remote-rooms";
@@ -33,6 +34,8 @@ export default function RoomPage() {
   const [deviceId, setDeviceId] = useState("");
   const [ready, setReady] = useState(false);
   const [live, setLive] = useState(false);
+  const [myVotedIds, setMyVotedIds] = useState<string[]>([]);
+  const [hostDeviceId, setHostDeviceId] = useState<string | undefined>();
 
   const load = useCallback(async () => {
     if (isSupabaseConfigured) {
@@ -42,9 +45,12 @@ export default function RoomPage() {
         upsertRoom(packed.room, role);
         setRoom(packed.room);
         setParticipants(packed.participants);
+        setMyVotedIds(packed.myVotedCardIds);
         setLive(true);
         const me = packed.participants.find((p) => p.device_id === getDeviceId());
         setReady(Boolean(me?.ready));
+        const host = packed.participants.find((p) => p.is_host);
+        setHostDeviceId(host?.device_id);
         return;
       }
     }
@@ -55,6 +61,7 @@ export default function RoomPage() {
     }
     setRoom(local);
     setLive(false);
+    setMyVotedIds([]);
   }, [code]);
 
   useEffect(() => {
@@ -96,6 +103,17 @@ export default function RoomPage() {
     await load();
   }
 
+  const isHost =
+    hostDeviceId === deviceId ||
+    participants.some((p) => p.device_id === deviceId && p.is_host) ||
+    getJoinedEntry(code)?.role === "host";
+
+  async function hostStartSwipe() {
+    if (!room || !isHost) return;
+    if (isSupabaseConfigured) await remoteSetStatus(room.id, "swiping");
+    onUpdate({ ...room, status: "swiping" });
+  }
+
   if (room === undefined) {
     return (
       <div className="flex items-center justify-center flex-1">
@@ -133,6 +151,7 @@ export default function RoomPage() {
           <p className="text-xs text-muted tracking-widest">
             {room.code}
             {live ? " · live" : " · local"}
+            {isHost ? " · host" : ""}
           </p>
         </div>
         <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-surface border-2 border-obsidian whitespace-nowrap">
@@ -150,10 +169,28 @@ export default function RoomPage() {
       )}
 
       {(room.status === "drafting" || room.status === "submitting") && (
-        <CardSubmit room={room} onUpdate={onUpdate} />
+        <>
+          <CardSubmit room={room} onUpdate={onUpdate} />
+          {isHost && room.cards.length >= 2 && (
+            <button
+              type="button"
+              className="btn-match w-full mt-2"
+              onClick={() => void hostStartSwipe()}
+            >
+              Host: start swiping for everyone →
+            </button>
+          )}
+        </>
       )}
 
-      {room.status === "swiping" && <SwipeStack room={room} onUpdate={onUpdate} />}
+      {room.status === "swiping" && (
+        <SwipeStack
+          room={room}
+          onUpdate={onUpdate}
+          alreadyVotedIds={myVotedIds}
+          isHost={isHost}
+        />
+      )}
 
       {room.status === "completed" && (
         <Results room={room} onBreakTie={onBreakTie} />

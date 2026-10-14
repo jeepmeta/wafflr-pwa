@@ -7,54 +7,52 @@ Mobile-first Progressive Web App. Swipe-tournament decision engine for groups.
 ## Stack
 
 - Next.js 15 (App Router) · React 19 · TypeScript
-- Tailwind CSS v4 — single theme tokens in `src/app/App.css`
-- Local room storage (2h lifetime · purge +1h)
+- Tailwind CSS v4 — single theme in `src/app/App.css`
+- Supabase Realtime — shared rooms / lobby / votes across devices
+- Offline shell via `public/sw.js`
+- Local storage fallback when Supabase env is missing
 
-## Product direction
-
-See `docs/`:
-
-| File | Purpose |
-|------|---------|
-| `docs/AGENTS.md` | Grok / contributor instructions |
-| `docs/wafflr-spec.md` | Full product + screen spec |
-| `docs/design-tokens.md` | Color, type, motion tokens |
-| `docs/wafflr-flow.html` | Decision-engine flowchart |
-| `public/characters/` | Cast sprites + checklist |
-
-### Canonical characters
-
-Butters the Waffle · Barron Bacon · Strawberry Sue · Hugh Blueberry · Eggin Targarian · O.J.
-
-## Screens (v0.3)
-
-- **Home** — Butters hero, Create / Join
-- **Create** — Type → Custom? → Cards setup → Code & share
-- **Join** — 6-char code (Barron on miss)
-- **Your Rooms** — list + expiry countdown
-- **Room** — full loop:
-  - **Cards** — add options (auto skins), Sue assist
-  - **Swipe** — drag Yum/Nah + buttons, progress bar, haptics
-  - **Results** — confetti, rankings, Eggin sudden-death on ties
-
-## Develop
+## Setup
 
 ```bash
+git clone https://github.com/jeepmeta/wafflr-pwa.git
+cd wafflr-pwa
 npm install
+cp .env.example .env.local
+```
+
+In `.env.local` set:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://emkdofdotchrvihilqsk.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key from Supabase dashboard>
+```
+
+Project: **Wafflr App** (`emkdofdotchrvihilqsk`, us-east-1).  
+Uses existing tables `rooms` + `participants` (swipe_match mode).
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+## Screens (v0.4)
 
-Try: Create Room → add ≥2 cards → Start swiping → see winner.
+- **Home** — Butters, Create / Join
+- **Create** — type → cards setup → **QR + code share** (live room on Supabase)
+- **Join** — code or `?code=` / QR auto-join
+- **Room** — lobby presence · add cards · swipe · results (confetti / Eggin tie-break)
+- **Your Rooms** — local list + expiry
+
+## Multiplayer flow
+
+1. Host creates room → dual-write Supabase (`mode: swipe_match`)
+2. Share code or QR (`/join?code=XXXXXX`)
+3. Joiners appear in **Lobby** with ready toggles
+4. Cards & votes sync via Realtime on `rooms` + `participants`
+5. Without env keys, app still works **local-only** on one device
 
 ## Constraints
 
-- `100dvh` locked viewports, no page scroll
-- Single cream theme (no light/dark split)
-- Tokens only — no ad-hoc hex
-- Rooms expire 2 hours after creation
-
-## Next
-
-Realtime multiplayer lobby · QR join · polished multi-frame sprite animation · PWA offline
+- `100dvh` locked viewports
+- Single cream theme
+- Rooms expire ~2 hours after creation

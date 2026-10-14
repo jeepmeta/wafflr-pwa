@@ -1,0 +1,27 @@
+{
+  "name": "wafflr-pwa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wafflr — sleek, gamified decision-making PWA. Where to eat & what to watch.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^15.5.4",
+    "next-pwa": "^5.6.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.8.2"
+  }
+}

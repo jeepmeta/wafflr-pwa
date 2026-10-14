@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Room } from "@/lib/rooms";
 import { isTieTop, rankedCards } from "@/lib/rooms";
+import { PostResultsInterstitial } from "@/components/ads/PostResultsInterstitial";
+import { RewardedRematch } from "@/components/ads/RewardedRematch";
 
 interface Props {
   room: Room;
@@ -77,6 +79,8 @@ export function Results({ room, onBreakTie }: Props) {
   const tie = isTieTop(room);
   const winner = ranked[0];
   const [breaking, setBreaking] = useState(false);
+  /** Interstitial only after a decisive winner — never during sudden death */
+  const [adDone, setAdDone] = useState(false);
 
   if (tie && ranked.length >= 2 && onBreakTie) {
     const a = ranked[0];
@@ -118,6 +122,8 @@ export function Results({ room, onBreakTie }: Props) {
   return (
     <div className="flex flex-col flex-1 w-full max-w-md mx-auto items-center relative">
       <ConfettiCanvas />
+      {!adDone && <PostResultsInterstitial onDone={() => setAdDone(true)} />}
+
       <div
         className="char-frame mb-2"
         style={{
@@ -160,6 +166,7 @@ export function Results({ room, onBreakTie }: Props) {
         <Link href="/create" className="btn-primary no-underline w-full text-center">
           Start new room
         </Link>
+        <RewardedRematch />
         <Link href="/rooms" className="btn-ghost no-underline w-full text-center">
           Back to rooms
         </Link>

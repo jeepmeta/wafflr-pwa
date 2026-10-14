@@ -21,10 +21,11 @@ No accounts. Device token only. Wheel/dice deferred.
 - Tie-breaker + confetti stable on live rooms
 - Empty/error states with cast characters
 
-## Phase 4 — Soft monetization
+## Phase 4 — Soft monetization ✅
 - Post-results interstitial only (never mid-swipe)
 - Optional rewarded “rematch / extra slot”
-- Feature flag for future ad-free SKU
+- Feature flag for future ad-free SKU (`NEXT_PUBLIC_WAFFLR_*` + `isAdFree`)
+- Max one interstitial per browser session
 
 ## Phase 5 — Share & growth
 - Results share card (image + code)

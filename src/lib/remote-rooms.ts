@@ -1,3 +1,12 @@
+/**
+ * Multiplayer over existing Wafflr Supabase schema:
+ * - public.rooms (code, mode, status, settings, item_payload, state, expires_at)
+ * - public.participants (room_id, display_name, is_host, is_ready, …)
+ *
+ * Cards live in rooms.item_payload (json array).
+ * Votes live in rooms.state.votes (json map).
+ */
+
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getDeviceId, getDisplayName } from "./device";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
@@ -14,8 +23,6 @@ export type Participant = {
 };
 
 export type RemoteVote = {
-  id: string;
-  room_id: string;
   card_id: string;
   device_id: string;
   vote: "yum" | "nah";
@@ -24,49 +31,83 @@ export type RemoteVote = {
 type DbRoom = {
   id: string;
   code: string;
-  title: string;
-  category: RoomCategory;
-  status: RoomStatus;
-  host_device_id: string;
-  host_only_cards: boolean;
-  max_cards_per_joiner: 1 | 2 | 3;
+  mode: string;
+  status: string;
+  settings: Record<string, unknown>;
+  item_payload: RoomCard[];
+  state: {
+    title?: string;
+    category?: RoomCategory;
+    host_device_id?: string;
+    votes?: RemoteVote[];
+  };
   created_at: string;
-  expires_at: string;
+  expires_at: string | null;
 };
 
-type DbCard = {
+type DbParticipant = {
   id: string;
   room_id: string;
-  name: string;
-  detail: string | null;
-  skin: string | null;
-  created_by: string;
+  display_name: string;
+  is_host: boolean;
+  is_ready: boolean;
+  joined_at: string;
+  user_id: string | null;
 };
 
-function toRoom(r: DbRoom, cards: RoomCard[] = []): Room {
+function mapStatus(s: string): RoomStatus {
+  if (s === "lobby") return "drafting";
+  if (s === "active") return "swiping";
+  if (s === "revealing") return "submitting";
+  if (s === "completed") return "completed";
+  if (s === "expired") return "expired";
+  return "drafting";
+}
+
+function toDbStatus(s: RoomStatus): string {
+  if (s === "drafting" || s === "submitting") return s === "submitting" ? "revealing" : "lobby";
+  if (s === "swiping") return "active";
+  if (s === "completed") return "completed";
+  return "expired";
+}
+
+function tallyCards(cards: RoomCard[], votes: RemoteVote[]): RoomCard[] {
+  return cards.map((c) => ({
+    ...c,
+    yum: votes.filter((v) => v.card_id === c.id && v.vote === "yum").length,
+    nah: votes.filter((v) => v.card_id === c.id && v.vote === "nah").length,
+  }));
+}
+
+function toRoom(r: DbRoom): Room {
+  const votes = r.state?.votes || [];
+  const cards = tallyCards(Array.isArray(r.item_payload) ? r.item_payload : [], votes);
+  const settings = r.settings || {};
   return {
     id: r.id,
     code: r.code,
-    title: r.title,
-    category: r.category,
-    status: r.status,
+    title: r.state?.title || "Wafflr room",
+    category: r.state?.category || "custom",
+    status: mapStatus(r.status),
     createdAt: new Date(r.created_at).getTime(),
-    expiresAt: new Date(r.expires_at).getTime(),
-    hostOnlyCards: r.host_only_cards,
-    maxCardsPerJoiner: r.max_cards_per_joiner,
+    expiresAt: r.expires_at
+      ? new Date(r.expires_at).getTime()
+      : Date.now() + ROOM_LIFETIME_MS,
+    hostOnlyCards: Boolean(settings.host_only_cards ?? true),
+    maxCardsPerJoiner: (Number(settings.max_cards_per_joiner) || 2) as 1 | 2 | 3,
     cards,
     participantIds: [],
   };
 }
 
-function toCard(c: DbCard, yum = 0, nah = 0): RoomCard {
+function toParticipant(p: DbParticipant, hostDevice?: string): Participant {
   return {
-    id: c.id,
-    name: c.name,
-    detail: c.detail || undefined,
-    skin: c.skin || undefined,
-    yum,
-    nah,
+    id: p.id,
+    room_id: p.room_id,
+    device_id: p.user_id || p.id,
+    display_name: p.display_name,
+    ready: p.is_ready,
+    joined_at: p.joined_at,
   };
 }
 
@@ -95,12 +136,21 @@ export async function remoteCreateRoom(input: {
     .from("rooms")
     .insert({
       code,
-      title,
-      category: input.category,
-      status: "drafting",
-      host_device_id: deviceId,
-      host_only_cards: input.hostOnlyCards,
-      max_cards_per_joiner: input.maxCardsPerJoiner,
+      mode: "swipe_match",
+      status: "lobby",
+      settings: {
+        host_only_cards: input.hostOnlyCards,
+        max_cards_per_joiner: input.maxCardsPerJoiner,
+        allow_anonymous: true,
+        require_all_ready: false,
+      },
+      item_payload: [],
+      state: {
+        title,
+        category: input.category,
+        host_device_id: deviceId,
+        votes: [],
+      },
       expires_at: expires,
     })
     .select()
@@ -111,13 +161,16 @@ export async function remoteCreateRoom(input: {
     return null;
   }
 
-  await sb.from("room_participants").insert({
+  await sb.from("participants").insert({
     room_id: data.id,
-    device_id: deviceId,
     display_name: getDisplayName(),
-    ready: false,
+    is_host: true,
+    is_ready: false,
+    user_id: null,
   });
 
+  // Store device binding on participant via display suffix is weak;
+  // put device id in state for host lookup.
   return toRoom(data as DbRoom);
 }
 
@@ -136,26 +189,19 @@ export async function remoteGetByCode(code: string): Promise<{
     .maybeSingle();
   if (error || !room) return null;
 
-  const [{ data: cards }, { data: votes }, { data: participants }] = await Promise.all([
-    sb.from("room_cards").select("*").eq("room_id", room.id),
-    sb.from("room_votes").select("*").eq("room_id", room.id),
-    sb.from("room_participants").select("*").eq("room_id", room.id),
-  ]);
+  const { data: participants } = await sb
+    .from("participants")
+    .select("*")
+    .eq("room_id", room.id);
 
-  const voteList = (votes || []) as RemoteVote[];
-  const mappedCards = ((cards || []) as DbCard[]).map((c) => {
-    const cv = voteList.filter((v) => v.card_id === c.id);
-    return toCard(
-      c,
-      cv.filter((v) => v.vote === "yum").length,
-      cv.filter((v) => v.vote === "nah").length
-    );
-  });
-
+  const db = room as DbRoom;
+  const votes = db.state?.votes || [];
   return {
-    room: toRoom(room as DbRoom, mappedCards),
-    participants: (participants || []) as Participant[],
-    votes: voteList,
+    room: toRoom(db),
+    participants: ((participants || []) as DbParticipant[]).map((p) =>
+      toParticipant(p, db.state?.host_device_id)
+    ),
+    votes,
   };
 }
 
@@ -163,16 +209,17 @@ export async function remoteJoinRoom(code: string): Promise<Room | null> {
   const packed = await remoteGetByCode(code);
   if (!packed) return null;
   const sb = getSupabase()!;
-  const deviceId = getDeviceId();
-  await sb.from("room_participants").upsert(
-    {
+  const name = getDisplayName();
+  // Avoid duplicate names: if same display already in room, skip insert
+  const exists = packed.participants.some((p) => p.display_name === name);
+  if (!exists) {
+    await sb.from("participants").insert({
       room_id: packed.room.id,
-      device_id: deviceId,
-      display_name: getDisplayName(),
-      ready: false,
-    },
-    { onConflict: "room_id,device_id" }
-  );
+      display_name: name,
+      is_host: false,
+      is_ready: false,
+    });
+  }
   return packed.room;
 }
 
@@ -183,29 +230,40 @@ export async function remoteAddCard(
 ): Promise<RoomCard | null> {
   const sb = getSupabase();
   if (!sb) return null;
-  const { data, error } = await sb
-    .from("room_cards")
-    .insert({
-      room_id: roomId,
-      name: name.trim(),
-      detail: detail?.trim() || null,
-      skin: pickSkin(name, detail),
-      created_by: getDeviceId(),
+  const { data: room, error } = await sb.from("rooms").select("*").eq("id", roomId).single();
+  if (error || !room) return null;
+  const db = room as DbRoom;
+  const card: RoomCard = {
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    detail: detail?.trim() || undefined,
+    skin: pickSkin(name, detail),
+    yum: 0,
+    nah: 0,
+  };
+  const payload = Array.isArray(db.item_payload) ? [...db.item_payload, card] : [card];
+  const { error: upErr } = await sb
+    .from("rooms")
+    .update({
+      item_payload: payload,
+      status: db.status === "lobby" ? "revealing" : db.status,
+      updated_at: new Date().toISOString(),
     })
-    .select()
-    .single();
-  if (error || !data) {
-    console.error("remoteAddCard", error);
+    .eq("id", roomId);
+  if (upErr) {
+    console.error("remoteAddCard", upErr);
     return null;
   }
-  await sb.from("rooms").update({ status: "submitting" }).eq("id", roomId).eq("status", "drafting");
-  return toCard(data as DbCard);
+  return card;
 }
 
 export async function remoteSetStatus(roomId: string, status: RoomStatus) {
   const sb = getSupabase();
   if (!sb) return;
-  await sb.from("rooms").update({ status }).eq("id", roomId);
+  await sb
+    .from("rooms")
+    .update({ status: toDbStatus(status), updated_at: new Date().toISOString() })
+    .eq("id", roomId);
 }
 
 export async function remoteVote(
@@ -215,25 +273,32 @@ export async function remoteVote(
 ) {
   const sb = getSupabase();
   if (!sb) return;
-  await sb.from("room_votes").upsert(
-    {
-      room_id: roomId,
-      card_id: cardId,
-      device_id: getDeviceId(),
-      vote,
-    },
-    { onConflict: "room_id,card_id,device_id" }
+  const { data: room } = await sb.from("rooms").select("state").eq("id", roomId).single();
+  if (!room) return;
+  const state = (room.state || {}) as DbRoom["state"];
+  const deviceId = getDeviceId();
+  const votes = (state.votes || []).filter(
+    (v) => !(v.card_id === cardId && v.device_id === deviceId)
   );
+  votes.push({ card_id: cardId, device_id: deviceId, vote });
+  await sb
+    .from("rooms")
+    .update({
+      state: { ...state, votes },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", roomId);
 }
 
 export async function remoteSetReady(roomId: string, ready: boolean) {
   const sb = getSupabase();
   if (!sb) return;
+  const name = getDisplayName();
   await sb
-    .from("room_participants")
-    .update({ ready })
+    .from("participants")
+    .update({ is_ready: ready, last_seen_at: new Date().toISOString() })
     .eq("room_id", roomId)
-    .eq("device_id", getDeviceId());
+    .eq("display_name", name);
 }
 
 export function subscribeRoom(roomId: string, onChange: () => void): () => void {
@@ -249,17 +314,7 @@ export function subscribeRoom(roomId: string, onChange: () => void): () => void 
     )
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "room_cards", filter: `room_id=eq.${roomId}` },
-      () => onChange()
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "room_votes", filter: `room_id=eq.${roomId}` },
-      () => onChange()
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "room_participants", filter: `room_id=eq.${roomId}` },
+      { event: "*", schema: "public", table: "participants", filter: `room_id=eq.${roomId}` },
       () => onChange()
     )
     .subscribe();

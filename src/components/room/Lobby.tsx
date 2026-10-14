@@ -21,6 +21,7 @@ export function Lobby({ participants, deviceId, onReady, ready }: Props) {
             <span>
               {p.display_name}
               {p.device_id === deviceId ? " (you)" : ""}
+              {p.is_host ? " · host" : ""}
             </span>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${

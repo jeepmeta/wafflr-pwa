@@ -2,16 +2,17 @@
 
 No accounts. Device token only. Wheel/dice deferred.
 
-## Phase 1 — Device memory (current)
+## Phase 1 — Device memory ✅
 - Stable `device_id` on each phone
 - **Joined-room registry**: every create/join is remembered until purge
 - **Your Rooms** lists hosted *and* joined rooms; rehydrates from local cache + Supabase
 - Survive refresh / signal drop without login
 
-## Phase 2 — Device-bound multiplayer
+## Phase 2 — Device-bound multiplayer ✅
 - Participants + votes keyed by `device_id` (not display name)
 - Rejoin restores ready state and prior votes for this device
 - Host can advance phase; joiners see live status
+- Skip already-voted cards on re-enter swipe stack
 
 ## Phase 3 — Core loop hardened
 - Create → share (code/QR) → cards → swipe → results end-to-end on 2+ devices

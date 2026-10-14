@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <title>Hugh Blueberry loading</title>
+  <circle cx="128" cy="128" r="56" fill="#3B82F6" stroke="#1E3A8A" stroke-width="4"/>
+  <circle cx="128" cy="118" r="38" fill="#60A5FA" opacity="0.3"/>
+  <circle cx="112" cy="120" r="7" fill="#0F172A"/><circle cx="144" cy="120" r="7" fill="#0F172A"/>
+  <path d="M 116 145 Q 128 155 140 145" stroke="#0F172A" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <ellipse cx="128" cy="80" rx="16" ry="7" fill="#1D4ED8"/>
+  <circle cx="60" cy="200" r="6" fill="#93C5FD"/><circle cx="128" cy="210" r="8" fill="#60A5FA"/><circle cx="196" cy="200" r="6" fill="#93C5FD"/>
+</svg>

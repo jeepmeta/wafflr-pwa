@@ -1,36 +1,38 @@
-# Wafflr PWA
+# Wafflr
 
-Sleek, gamified decision-making platform. Mobile-first Progressive Web App.
+> **Stop waffling. Start living.**
 
-**Decide faster.** Fair, fun, and done in under a minute.
+Mobile-first Progressive Web App. Swipe-tournament decision engine for groups.
 
 ## Stack
 
-- **Next.js 15** (App Router) + React 19
-- **Tailwind CSS v4** via single `src/app/App.css` (all design tokens live here)
-- **PWA** ready (manifest, icons)
-- Official Wafflr mark, Fredoka + Inter fonts, design tokens from branding kit
+- Next.js 15 (App Router) · React 19 · TypeScript
+- Tailwind CSS v4 — single theme tokens in `src/app/App.css`
+- Local room storage (2h lifetime · purge +1h)
 
-## Templates (extensible)
+## Product direction
 
-| Route   | Template      | Catalog        |
-|---------|---------------|----------------|
-| `/eat`  | Where to eat  | Food categories |
-| `/watch`| What to watch | Movies         |
+See `docs/`:
 
-Add a new template by:
-1. Extending `src/lib/catalogs.ts`
-2. Adding a `ModeCard` on the home page
-3. Creating a route that reuses `<Wheel items={...} />`
+| File | Purpose |
+|------|---------|
+| `docs/AGENTS.md` | Grok / contributor instructions |
+| `docs/wafflr-spec.md` | Full product + screen spec |
+| `docs/design-tokens.md` | Color, type, motion tokens |
+| `docs/wafflr-flow.html` | Decision-engine flowchart |
+| `public/characters/` | Cast sprites + checklist |
 
-## Design system
+### Canonical characters
 
-All colors, spacing, radius, and motion live in **`src/app/App.css`**.  
-Do not hard-code hex or px values in components. Use CSS variables / utility classes defined there.
+Butters the Waffle · Barron Bacon · Strawberry Sue · Hugh Blueberry · Eggin Targarian · O.J.
 
-- Dark mode default (`data-theme="dark"`)
-- Brand: Amber `#F59E0B`, Emerald `#10B981`, Pink `#EC4899`, Slate canvas `#0F172A`
-- Fonts: Fredoka (bubble / wordmark), Inter (UI)
+## Screens (v0.2)
+
+- **Home** — Butters hero, Create / Join
+- **Create** — Type → Custom? → Cards setup → Code & share
+- **Join** — 6-char code (Barron on miss)
+- **Your Rooms** — list + expiry countdown
+- **Room** — shell (swipe engine next)
 
 ## Develop
 
@@ -41,11 +43,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Product constraints
+## Constraints
 
-- Fairness via randomness + consensus
-- Sessions complete in ≤60 seconds
-- Zero-friction, mobile-first
-- Modular micro-game interfaces (Wheel first; swipe / bracket later)
-
-See the main Wafflr Expo repo and `design-tokens.md` / `branding-kit.html` for full product vision.
+- `100dvh` locked viewports, no page scroll
+- Single cream theme (no light/dark split)
+- Tokens only — no ad-hoc hex
+- Rooms expire 2 hours after creation

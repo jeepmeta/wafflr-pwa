@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Room, RoomCard } from "@/lib/rooms";
 import { applyVote, completeRoom } from "@/lib/rooms";
+import { getDeviceId } from "@/lib/device";
+import { voteWithOfflineQueue } from "@/lib/offline";
 import {
   isSupabaseConfigured,
   remoteCompleteIfReady,
@@ -15,9 +17,7 @@ interface Props {
   room: Room;
   onUpdate: (room: Room) => void;
   alreadyVotedIds?: string[];
-  /** Other phones in the room — used to gate completion. */
   participantDeviceIds?: string[];
-  /** Latest vote list for completion check. */
   votes?: RemoteVote[];
   isHost?: boolean;
 }
@@ -60,24 +60,19 @@ export function SwipeStack({
       setTimeout(() => {
         void (async () => {
           localVoted.current.add(current.id);
+          const deviceId = getDeviceId();
           let nextVotes = votes;
+
           if (isSupabaseConfigured) {
-            await remoteVote(room.id, current.id, vote);
+            await voteWithOfflineQueue(room.id, current.id, vote, remoteVote);
             nextVotes = [
               ...votes.filter(
-                (v) =>
-                  !(v.card_id === current.id && v.device_id === localVoted.current && false)
+                (v) => !(v.card_id === current.id && v.device_id === deviceId)
               ),
-            ];
-            // Optimistic local vote for completion check
-            const { getDeviceId } = await import("@/lib/device");
-            nextVotes = [
-              ...votes.filter(
-                (v) => !(v.card_id === current.id && v.device_id === getDeviceId())
-              ),
-              { card_id: current.id, device_id: getDeviceId(), vote },
+              { card_id: current.id, device_id: deviceId, vote },
             ];
           }
+
           const nextRoom = applyVote(room, current.id, vote);
           let nextIndex = index + 1;
           while (nextIndex < cards.length && localVoted.current.has(cards[nextIndex].id)) {
@@ -87,26 +82,23 @@ export function SwipeStack({
           setOffset({ x: 0, y: 0 });
 
           if (nextIndex >= cards.length) {
-            // This device finished — complete room only if everyone is done
-            if (isSupabaseConfigured) {
+            if (isSupabaseConfigured && navigator.onLine) {
               const cardIds = cards.map((c) => c.id);
               const ids =
-                participantDeviceIds.length > 0
-                  ? participantDeviceIds
-                  : [(await import("@/lib/device")).getDeviceId()];
+                participantDeviceIds.length > 0 ? participantDeviceIds : [deviceId];
               const allDone = await remoteCompleteIfReady(
                 room.id,
                 nextVotes,
                 cardIds,
                 ids
               );
-              if (allDone) {
-                onUpdate(completeRoom(nextRoom));
-              } else {
-                onUpdate(nextRoom); // stay in swiping; WaitScreen shows
-              }
-            } else {
+              if (allDone) onUpdate(completeRoom(nextRoom));
+              else onUpdate(nextRoom);
+            } else if (!isSupabaseConfigured) {
               onUpdate(completeRoom(nextRoom));
+            } else {
+              // Offline — keep local progress; complete when queue flushes + peers done
+              onUpdate(nextRoom);
             }
             setIndex(cards.length);
           } else {

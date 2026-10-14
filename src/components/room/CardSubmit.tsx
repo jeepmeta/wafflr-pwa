@@ -3,6 +3,11 @@
 import { useState } from "react";
 import type { Room } from "@/lib/rooms";
 import { addCard, startSwiping } from "@/lib/rooms";
+import {
+  isSupabaseConfigured,
+  remoteAddCard,
+  remoteSetStatus,
+} from "@/lib/remote-rooms";
 
 interface Props {
   room: Room;
@@ -12,20 +17,46 @@ interface Props {
 export function CardSubmit({ room, onUpdate }: Props) {
   const [name, setName] = useState("");
   const [detail, setDetail] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
-    const next = addCard(room, name, detail);
-    onUpdate(next);
-    setName("");
-    setDetail("");
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(10);
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try {
+      if (isSupabaseConfigured) {
+        const card = await remoteAddCard(room.id, name, detail);
+        if (card) {
+          onUpdate({
+            ...room,
+            status: room.status === "drafting" ? "submitting" : room.status,
+            cards: [...room.cards, card],
+          });
+          setName("");
+          setDetail("");
+          if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate(10);
+          }
+          return;
+        }
+      }
+      const next = addCard(room, name, detail);
+      onUpdate(next);
+      setName("");
+      setDetail("");
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(10);
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
-  function goSwipe() {
+  async function goSwipe() {
+    if (room.cards.length < 2) return;
+    if (isSupabaseConfigured) {
+      await remoteSetStatus(room.id, "swiping");
+    }
     const next = startSwiping(room);
     onUpdate(next);
   }
@@ -77,8 +108,8 @@ export function CardSubmit({ room, onUpdate }: Props) {
           onChange={(e) => setDetail(e.target.value)}
           maxLength={80}
         />
-        <button type="submit" className="btn-primary w-full" disabled={!name.trim()}>
-          Add card
+        <button type="submit" className="btn-primary w-full" disabled={!name.trim() || busy}>
+          {busy ? "Adding…" : "Add card"}
         </button>
       </form>
 
@@ -86,7 +117,7 @@ export function CardSubmit({ room, onUpdate }: Props) {
         type="button"
         className="btn-match w-full"
         disabled={room.cards.length < 2}
-        onClick={goSwipe}
+        onClick={() => void goSwipe()}
       >
         {room.cards.length < 2 ? "Need at least 2 cards" : "Start swiping →"}
       </button>

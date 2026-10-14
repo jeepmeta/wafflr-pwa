@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" fill="none">
+  <defs>
+    <linearGradient id="grad-waffle-body" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="40%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#C15B0D"/>
+    </linearGradient>
+    <linearGradient id="grad-pocket" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#78350F" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#92400E" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="grad-shine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="30%" stop-color="#FFFFFF" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Limbs -->
+  <g stroke="#78350F" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Left Arm (Shrugging up) -->
+    <path d="m38 75-22 5-6-20-4 0" />
+    <!-- Right Arm (Shrugging up) -->
+    <path d="m122 75 22 5 6-20 4 0" />
+    
+    <!-- Left Leg -->
+    <path d="M 60 132 L 60 148 L 48 148" />
+    <!-- Right Leg -->
+    <path d="M 100 132 L 100 148 L 112 148" />
+  </g>
+
+  <!-- Waffle Body -->
+  <g transform="translate(16, 16)">
+    <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#grad-waffle-body)"/>
+    <path d="M 12 36 C 12 22.748 22.748 12 36 12 L 92 12 C 105.252 12 116 22.748 116 36 C 116 42 70 65 12 36 Z" fill="url(#grad-shine)"/>
+    <g fill="url(#grad-pocket)">
+      <rect x="22" y="22" width="24" height="24" rx="6"/>
+      <rect x="52" y="22" width="24" height="24" rx="6"/>
+      <rect x="82" y="22" width="24" height="24" rx="6"/>
+      <rect x="22" y="52" width="24" height="24" rx="6"/>
+      <rect x="52" y="52" width="24" height="24" rx="6"/>
+      <rect x="82" y="52" width="24" height="24" rx="6"/>
+      <rect x="22" y="82" width="24" height="24" rx="6"/>
+      <rect x="52" y="82" width="24" height="24" rx="6"/>
+      <rect x="82" y="82" width="24" height="24" rx="6"/>
+    </g>
+    <g fill="none" stroke="#FEF3C7" stroke-width="1.75" opacity="0.65">
+      <rect x="22" y="22" width="24" height="24" rx="6"/>
+      <rect x="52" y="22" width="24" height="24" rx="6"/>
+      <rect x="82" y="22" width="24" height="24" rx="6"/>
+      <rect x="22" y="52" width="24" height="24" rx="6"/>
+      <rect x="52" y="52" width="24" height="24" rx="6"/>
+      <rect x="82" y="52" width="24" height="24" rx="6"/>
+      <rect x="22" y="82" width="24" height="24" rx="6"/>
+      <rect x="52" y="82" width="24" height="24" rx="6"/>
+      <rect x="82" y="82" width="24" height="24" rx="6"/>
+    </g>
+    <circle cx="20" cy="20" r="3" fill="#FFFFFF" opacity="0.7"/>
+    <circle cx="28" cy="16" r="1.5" fill="#FFFFFF" opacity="0.7"/>
+  </g>
+
+  <!-- Character Face Overlay -->
+  <g>
+    <!-- Rosy Cheeks -->
+    <circle cx="53" cy="76" r="7" fill="#F43F5E" opacity="0.6"/>
+    <circle cx="107" cy="76" r="7" fill="#F43F5E" opacity="0.6"/>
+    
+    <!-- Eyes -->
+    <circle cx="65" cy="66" r="7" fill="#451A03"/>
+    <circle cx="63" cy="64" r="2.5" fill="#FFFFFF"/>
+    <circle cx="95" cy="66" r="7" fill="#451A03"/>
+    <circle cx="93" cy="64" r="2.5" fill="#FFFFFF"/>
+
+    <!-- Indecisive Squiggly Mouth -->
+    <path d="m 74 80 q 3 -3 6 0 t 6 0" fill="none" stroke="#451A03" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

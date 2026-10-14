@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { QrCode } from "@/components/room/QrCode";
 import { CATEGORIES } from "@/lib/categories";
 import { createRoomDraft, upsertRoom, type RoomCategory } from "@/lib/rooms";
+import { isSupabaseConfigured, remoteCreateRoom } from "@/lib/remote-rooms";
 
 type Step = "type" | "custom" | "cards" | "share";
 
@@ -14,6 +16,8 @@ export default function CreatePage() {
   const [hostOnly, setHostOnly] = useState(true);
   const [maxCards, setMaxCards] = useState<1 | 2 | 3>(2);
   const [code, setCode] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [online, setOnline] = useState(false);
 
   function pickCategory(id: RoomCategory) {
     setCategory(id);
@@ -29,14 +33,34 @@ export default function CreatePage() {
     setStep("cards");
   }
 
-  function createRoom() {
-    if (!category) return;
-    const room = createRoomDraft(category, title, hostOnly, maxCards);
-    upsertRoom(room);
-    setCode(room.code);
-    setStep("share");
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate([10, 30, 20]);
+  async function createRoom() {
+    if (!category || creating) return;
+    setCreating(true);
+    try {
+      let room = null;
+      if (isSupabaseConfigured) {
+        room = await remoteCreateRoom({
+          category,
+          title,
+          hostOnlyCards: hostOnly,
+          maxCardsPerJoiner: maxCards,
+        });
+        setOnline(Boolean(room));
+      }
+      if (!room) {
+        room = createRoomDraft(category, title, hostOnly, maxCards);
+        upsertRoom(room);
+        setOnline(false);
+      } else {
+        upsertRoom(room);
+      }
+      setCode(room.code);
+      setStep("share");
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([10, 30, 20]);
+      }
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -48,11 +72,19 @@ export default function CreatePage() {
     }
   }
 
+  const joinUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/join?code=${code}`
+      : `/join?code=${code}`;
+
   async function shareRoom() {
-    const url = `${window.location.origin}/join?code=${code}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Join my Wafflr room", text: `Code: ${code}`, url });
+        await navigator.share({
+          title: "Join my Wafflr room",
+          text: `Code: ${code}`,
+          url: joinUrl,
+        });
       } catch {
         /* cancelled */
       }
@@ -85,7 +117,6 @@ export default function CreatePage() {
             ← Back
           </button>
           <h1 className="font-display font-bold text-2xl mb-1">What are we deciding?</h1>
-          <p className="text-muted text-sm mb-4">Write your question</p>
           <input
             className="input-lg mb-3"
             autoFocus
@@ -153,8 +184,8 @@ export default function CreatePage() {
               </div>
             </div>
           )}
-          <button type="button" className="btn-match w-full" onClick={createRoom}>
-            Create Room!
+          <button type="button" className="btn-match w-full" disabled={creating} onClick={createRoom}>
+            {creating ? "Creating…" : "Create Room!"}
           </button>
         </>
       )}
@@ -162,12 +193,17 @@ export default function CreatePage() {
       {step === "share" && (
         <>
           <h1 className="font-display font-bold text-2xl mb-1 text-center">Room ready</h1>
-          <p className="text-muted text-sm mb-6 text-center">Share this code with your group</p>
+          <p className="text-muted text-sm mb-2 text-center">
+            {online ? "Live multiplayer room" : "Local room (offline / no Supabase)"}
+          </p>
           <div className="card text-center mb-4">
             <p className="room-code">{code.split("").join(" ")}</p>
             <button type="button" className="btn-ghost mt-3" onClick={copyCode}>
               Copy code
             </button>
+          </div>
+          <div className="flex justify-center mb-4">
+            <QrCode value={joinUrl} size={160} label="Scan to join" />
           </div>
           <button type="button" className="btn-primary w-full mb-3" onClick={shareRoom}>
             Share link

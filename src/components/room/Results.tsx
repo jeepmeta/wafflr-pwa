@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Room } from "@/lib/rooms";
 import { isTieTop, rankedCards } from "@/lib/rooms";
 
@@ -76,6 +76,7 @@ export function Results({ room, onBreakTie }: Props) {
   const ranked = rankedCards(room);
   const tie = isTieTop(room);
   const winner = ranked[0];
+  const [breaking, setBreaking] = useState(false);
 
   if (tie && ranked.length >= 2 && onBreakTie) {
     const a = ranked[0];
@@ -94,12 +95,22 @@ export function Results({ room, onBreakTie }: Props) {
         <p className="text-muted text-sm mb-6 text-center">Tie on top — tap your pick once</p>
         <div className="grid grid-cols-2 gap-3 w-full">
           {[a, b].map((c) => (
-            <button key={c.id} type="button" className="tile" onClick={() => onBreakTie(c.id)}>
+            <button
+              key={c.id}
+              type="button"
+              className="tile"
+              disabled={breaking}
+              onClick={() => {
+                setBreaking(true);
+                onBreakTie(c.id);
+              }}
+            >
               <span className="font-display font-bold block">{c.name}</span>
               {c.detail && <span className="text-xs text-muted block mt-1">{c.detail}</span>}
             </button>
           ))}
         </div>
+        {breaking && <p className="text-xs text-muted mt-4">Locking in…</p>}
       </div>
     );
   }
@@ -121,7 +132,7 @@ export function Results({ room, onBreakTie }: Props) {
         style={{ width: 72, height: 72, backgroundImage: "url(/characters/oj/idle.svg)" }}
       />
       <p className="text-xs font-semibold uppercase tracking-wide text-syrup mb-1">Winner</p>
-      <h2 className="font-display font-bold text-3xl text-center mb-1">{winner?.name}</h2>
+      <h2 className="font-display font-bold text-3xl text-center mb-1">{winner?.name || "—"}</h2>
       {winner?.detail && <p className="text-muted text-sm text-center mb-4">{winner.detail}</p>}
       {winner && (
         <p className="text-sm font-semibold mb-6">

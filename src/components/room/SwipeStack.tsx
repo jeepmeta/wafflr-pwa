@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { Room, RoomCard } from "@/lib/rooms";
 import { applyVote, completeRoom } from "@/lib/rooms";
+import { isSupabaseConfigured, remoteSetStatus, remoteVote } from "@/lib/remote-rooms";
 
 interface Props {
   room: Room;
@@ -29,16 +30,24 @@ export function SwipeStack({ room, onUpdate }: Props) {
       }
       setFlyOut(vote === "yum" ? "right" : "left");
       setTimeout(() => {
-        const nextRoom = applyVote(room, current.id, vote);
-        const nextIndex = index + 1;
-        setFlyOut(null);
-        setOffset({ x: 0, y: 0 });
-        if (nextIndex >= cards.length) {
-          onUpdate(completeRoom(nextRoom));
-        } else {
-          setIndex(nextIndex);
-          onUpdate(nextRoom);
-        }
+        void (async () => {
+          if (isSupabaseConfigured) {
+            await remoteVote(room.id, current.id, vote);
+          }
+          const nextRoom = applyVote(room, current.id, vote);
+          const nextIndex = index + 1;
+          setFlyOut(null);
+          setOffset({ x: 0, y: 0 });
+          if (nextIndex >= cards.length) {
+            if (isSupabaseConfigured) {
+              await remoteSetStatus(room.id, "completed");
+            }
+            onUpdate(completeRoom(nextRoom));
+          } else {
+            setIndex(nextIndex);
+            onUpdate(nextRoom);
+          }
+        })();
       }, 220);
     },
     [current, room, index, cards.length, onUpdate]

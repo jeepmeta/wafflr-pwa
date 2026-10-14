@@ -1,10 +1,11 @@
 /**
  * Multiplayer over existing Wafflr Supabase schema:
  * - public.rooms (code, mode, status, settings, item_payload, state, expires_at)
- * - public.participants (room_id, display_name, is_host, is_ready, …)
+ * - public.participants (room_id, device_id, display_name, is_host, is_ready, …)
  *
- * Cards live in rooms.item_payload (json array).
- * Votes live in rooms.state.votes (json map).
+ * Phase 2: all membership + votes keyed by device_id.
+ * Cards live in rooms.item_payload.
+ * Votes live in rooms.state.votes [{ card_id, device_id, vote }].
  */
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -19,6 +20,7 @@ export type Participant = {
   device_id: string;
   display_name: string;
   ready: boolean;
+  is_host: boolean;
   joined_at: string;
 };
 
@@ -53,6 +55,7 @@ type DbParticipant = {
   is_ready: boolean;
   joined_at: string;
   user_id: string | null;
+  device_id: string | null;
 };
 
 function mapStatus(s: string): RoomStatus {
@@ -65,7 +68,8 @@ function mapStatus(s: string): RoomStatus {
 }
 
 function toDbStatus(s: RoomStatus): string {
-  if (s === "drafting" || s === "submitting") return s === "submitting" ? "revealing" : "lobby";
+  if (s === "drafting") return "lobby";
+  if (s === "submitting") return "revealing";
   if (s === "swiping") return "active";
   if (s === "completed") return "completed";
   return "expired";
@@ -100,15 +104,25 @@ function toRoom(r: DbRoom): Room {
   };
 }
 
-function toParticipant(p: DbParticipant, hostDevice?: string): Participant {
+function toParticipant(p: DbParticipant): Participant {
   return {
     id: p.id,
     room_id: p.room_id,
-    device_id: p.user_id || p.id,
+    device_id: p.device_id || "",
     display_name: p.display_name,
     ready: p.is_ready,
+    is_host: p.is_host,
     joined_at: p.joined_at,
   };
+}
+
+/** Card ids this device has already voted on (for swipe resume). */
+export function votedCardIdsForDevice(
+  votes: RemoteVote[],
+  deviceId?: string
+): Set<string> {
+  const id = deviceId || getDeviceId();
+  return new Set(votes.filter((v) => v.device_id === id).map((v) => v.card_id));
 }
 
 export async function remoteCreateRoom(input: {
@@ -163,14 +177,12 @@ export async function remoteCreateRoom(input: {
 
   await sb.from("participants").insert({
     room_id: data.id,
+    device_id: deviceId,
     display_name: getDisplayName(),
     is_host: true,
     is_ready: false,
-    user_id: null,
   });
 
-  // Store device binding on participant via display suffix is weak;
-  // put device id in state for host lookup.
   return toRoom(data as DbRoom);
 }
 
@@ -178,6 +190,7 @@ export async function remoteGetByCode(code: string): Promise<{
   room: Room;
   participants: Participant[];
   votes: RemoteVote[];
+  myVotedCardIds: string[];
 } | null> {
   const sb = getSupabase();
   if (!sb) return null;
@@ -196,27 +209,43 @@ export async function remoteGetByCode(code: string): Promise<{
 
   const db = room as DbRoom;
   const votes = db.state?.votes || [];
+  const deviceId = getDeviceId();
   return {
     room: toRoom(db),
-    participants: ((participants || []) as DbParticipant[]).map((p) =>
-      toParticipant(p, db.state?.host_device_id)
-    ),
+    participants: ((participants || []) as DbParticipant[]).map(toParticipant),
     votes,
+    myVotedCardIds: [...votedCardIdsForDevice(votes, deviceId)],
   };
 }
 
+/**
+ * Join or rejoin by device_id.
+ * Upserts participant so the same phone never doubles in the lobby.
+ */
 export async function remoteJoinRoom(code: string): Promise<Room | null> {
   const packed = await remoteGetByCode(code);
   if (!packed) return null;
   const sb = getSupabase()!;
-  const name = getDisplayName();
-  // Avoid duplicate names: if same display already in room, skip insert
-  const exists = packed.participants.some((p) => p.display_name === name);
-  if (!exists) {
+  const deviceId = getDeviceId();
+  const existing = packed.participants.find((p) => p.device_id === deviceId);
+
+  if (existing) {
+    await sb
+      .from("participants")
+      .update({
+        display_name: getDisplayName(),
+        last_seen_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+  } else {
+    const hostRow = await sb.from("rooms").select("state").eq("id", packed.room.id).single();
+    const hostState = hostRow.data?.state as DbRoom["state"] | undefined;
+    const isHost = hostState?.host_device_id === deviceId;
     await sb.from("participants").insert({
       room_id: packed.room.id,
-      display_name: name,
-      is_host: false,
+      device_id: deviceId,
+      display_name: getDisplayName(),
+      is_host: Boolean(isHost),
       is_ready: false,
     });
   }
@@ -266,6 +295,7 @@ export async function remoteSetStatus(roomId: string, status: RoomStatus) {
     .eq("id", roomId);
 }
 
+/** Upsert vote for this device_id only (one vote per card per device). */
 export async function remoteVote(
   roomId: string,
   cardId: string,
@@ -290,15 +320,23 @@ export async function remoteVote(
     .eq("id", roomId);
 }
 
+/** Ready toggle keyed by device_id. */
 export async function remoteSetReady(roomId: string, ready: boolean) {
   const sb = getSupabase();
   if (!sb) return;
-  const name = getDisplayName();
+  const deviceId = getDeviceId();
   await sb
     .from("participants")
     .update({ is_ready: ready, last_seen_at: new Date().toISOString() })
     .eq("room_id", roomId)
-    .eq("display_name", name);
+    .eq("device_id", deviceId);
+}
+
+/** True if this device is the room host. */
+export function isHostDevice(participants: Participant[], hostDeviceId?: string): boolean {
+  const me = getDeviceId();
+  if (hostDeviceId) return hostDeviceId === me;
+  return participants.some((p) => p.device_id === me && p.is_host);
 }
 
 export function subscribeRoom(roomId: string, onChange: () => void): () => void {

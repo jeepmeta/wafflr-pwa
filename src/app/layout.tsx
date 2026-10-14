@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, Inter } from "next/font/google";
+import Script from "next/script";
 import { AppHeader } from "@/components/layout/AppHeader";
 import "./App.css";
 
@@ -53,6 +54,13 @@ export default function RootLayout({
           <AppHeader />
           <main className="app-main">{children}</main>
         </div>
+        <Script id="sw-register" strategy="afterInteractive">{
+          `if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+              navigator.serviceWorker.register('/sw.js').catch(function () {});
+            });
+          }`
+        }</Script>
       </body>
     </html>
   );

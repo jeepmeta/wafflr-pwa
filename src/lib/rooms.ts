@@ -1,5 +1,7 @@
 /** Room types aligned with wafflr-spec.md lifecycle */
 
+import { rememberRoom, touchJoined } from "./joined";
+
 export type RoomStatus =
   | "drafting"
   | "submitting"
@@ -118,19 +120,30 @@ export function saveRooms(rooms: Room[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
 }
 
-export function upsertRoom(room: Room) {
-  const rooms = loadRooms().filter((r) => r.id !== room.id);
+/** Persist full room snapshot + touch joined registry (keeps role if already joined). */
+export function upsertRoom(room: Room, role?: "host" | "joiner") {
+  const rooms = loadRooms().filter((r) => r.id !== room.id && r.code !== room.code);
   rooms.unshift(room);
   saveRooms(rooms);
+  if (role) {
+    rememberRoom(room, role);
+  } else {
+    touchJoined(room.code, {
+      title: room.title,
+      status: room.status,
+      expiresAt: room.expiresAt,
+      roomId: room.id,
+    });
+  }
 }
 
 export function getRoomByCode(code: string): Room | undefined {
   return loadRooms().find(
-    (r) => r.code.toUpperCase() === code.toUpperCase() && r.status !== "expired"
+    (r) => r.code.toUpperCase() === code.toUpperCase()
   );
 }
 
-export function remainingMs(room: Room): number {
+export function remainingMs(room: { expiresAt: number }): number {
   return Math.max(0, room.expiresAt - Date.now());
 }
 

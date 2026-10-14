@@ -44,6 +44,22 @@ export function generateCode(): string {
   return code;
 }
 
+const SKINS = [
+  "Neon Night",
+  "Retro Diner",
+  "Cinema Dark",
+  "Pastel Casual",
+  "Syrup Gold",
+  "Berry Pop",
+] as const;
+
+export function pickSkin(name: string, detail?: string): string {
+  const key = (name + (detail || "")).toLowerCase();
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h + key.charCodeAt(i) * (i + 1)) % SKINS.length;
+  return SKINS[h];
+}
+
 export function createRoomDraft(
   category: RoomCategory,
   title: string,
@@ -122,4 +138,63 @@ export function formatRemaining(ms: number): string {
   const m = Math.floor(ms / 60000);
   if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`;
   return `${m}m`;
+}
+
+export function addCard(room: Room, name: string, detail?: string): Room {
+  const card: RoomCard = {
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    detail: detail?.trim() || undefined,
+    skin: pickSkin(name, detail),
+    yum: 0,
+    nah: 0,
+  };
+  const next: Room = {
+    ...room,
+    status: room.status === "drafting" ? "submitting" : room.status,
+    cards: [...room.cards, card],
+  };
+  upsertRoom(next);
+  return next;
+}
+
+export function startSwiping(room: Room): Room {
+  if (room.cards.length < 2) return room;
+  const next: Room = { ...room, status: "swiping" };
+  upsertRoom(next);
+  return next;
+}
+
+export function applyVote(room: Room, cardId: string, vote: "yum" | "nah"): Room {
+  const cards = room.cards.map((c) => {
+    if (c.id !== cardId) return c;
+    return vote === "yum" ? { ...c, yum: c.yum + 1 } : { ...c, nah: c.nah + 1 };
+  });
+  const next: Room = { ...room, cards };
+  upsertRoom(next);
+  return next;
+}
+
+export function completeRoom(room: Room): Room {
+  const next: Room = { ...room, status: "completed" };
+  upsertRoom(next);
+  return next;
+}
+
+export function rankedCards(room: Room): RoomCard[] {
+  return [...room.cards].sort((a, b) => {
+    const scoreA = a.yum - a.nah;
+    const scoreB = b.yum - b.nah;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    if (b.yum !== a.yum) return b.yum - a.yum;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+export function isTieTop(room: Room): boolean {
+  const ranked = rankedCards(room);
+  if (ranked.length < 2) return false;
+  const s0 = ranked[0].yum - ranked[0].nah;
+  const s1 = ranked[1].yum - ranked[1].nah;
+  return s0 === s1 && ranked[0].yum === ranked[1].yum;
 }

@@ -49,11 +49,10 @@ export default function CreatePage() {
       }
       if (!room) {
         room = createRoomDraft(category, title, hostOnly, maxCards);
-        upsertRoom(room);
         setOnline(false);
-      } else {
-        upsertRoom(room);
       }
+      // Host role stuck on this device until purge
+      upsertRoom(room, "host");
       setCode(room.code);
       setStep("share");
       if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -155,7 +154,7 @@ export default function CreatePage() {
               className={`tile text-left ${hostOnly ? "ring-2 ring-syrup" : ""}`}
               onClick={() => setHostOnly(true)}
             >
-              <span className="font-display font-semibold">I'll make all the cards</span>
+              <span className="font-display font-semibold">I&apos;ll make all the cards</span>
               <span className="block text-xs text-muted mt-1">You build the full list</span>
             </button>
             <button

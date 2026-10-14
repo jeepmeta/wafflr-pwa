@@ -7,6 +7,7 @@ import { CardSubmit } from "@/components/room/CardSubmit";
 import { Lobby } from "@/components/room/Lobby";
 import { Results } from "@/components/room/Results";
 import { SwipeStack } from "@/components/room/SwipeStack";
+import { getJoinedEntry } from "@/lib/joined";
 import { getDeviceId } from "@/lib/device";
 import {
   applyVote,
@@ -37,7 +38,8 @@ export default function RoomPage() {
     if (isSupabaseConfigured) {
       const packed = await remoteGetByCode(code);
       if (packed) {
-        upsertRoom(packed.room);
+        const role = getJoinedEntry(code)?.role || "joiner";
+        upsertRoom(packed.room, role);
         setRoom(packed.room);
         setParticipants(packed.participants);
         setLive(true);
@@ -46,7 +48,12 @@ export default function RoomPage() {
         return;
       }
     }
-    setRoom(getRoomByCode(code) ?? null);
+    const local = getRoomByCode(code) ?? null;
+    if (local) {
+      const role = getJoinedEntry(code)?.role || "joiner";
+      upsertRoom(local, role);
+    }
+    setRoom(local);
     setLive(false);
   }, [code]);
 
@@ -54,7 +61,11 @@ export default function RoomPage() {
     setDeviceId(getDeviceId());
     void (async () => {
       if (isSupabaseConfigured) {
-        await remoteJoinRoom(code);
+        const remote = await remoteJoinRoom(code);
+        if (remote) {
+          const role = getJoinedEntry(code)?.role || "joiner";
+          upsertRoom(remote, role);
+        }
       }
       await load();
     })();

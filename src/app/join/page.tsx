@@ -27,13 +27,14 @@ function JoinForm() {
       if (isSupabaseConfigured) {
         const remote = await remoteJoinRoom(c);
         if (remote) {
-          upsertRoom(remote);
+          upsertRoom(remote, "joiner");
           router.push(`/room/${remote.code}`);
           return;
         }
       }
       const local = getRoomByCode(c);
-      if (local) {
+      if (local && local.status !== "expired") {
+        upsertRoom(local, "joiner");
         router.push(`/room/${local.code}`);
         return;
       }
@@ -48,7 +49,6 @@ function JoinForm() {
     void tryJoin(code);
   }
 
-  // Auto-join when landing from QR / share link
   useEffect(() => {
     const q = search.get("code");
     if (q && q.length >= 6) {
@@ -66,7 +66,7 @@ function JoinForm() {
         />
         <h1 className="font-display font-bold text-xl mb-2">Oops!</h1>
         <p className="text-muted text-sm mb-6 max-w-xs">
-          That room code expired or doesn't exist.
+          That room code expired or doesn&apos;t exist.
         </p>
         <button type="button" className="btn-ghost mb-3" onClick={() => setError(false)}>
           Try again

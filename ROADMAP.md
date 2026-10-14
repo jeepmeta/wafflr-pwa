@@ -14,9 +14,10 @@ No accounts. Device token only. Wheel/dice deferred.
 - Host can advance phase; joiners see live status
 - Skip already-voted cards on re-enter swipe stack
 
-## Phase 3 — Core loop hardened
+## Phase 3 — Core loop hardened ✅
 - Create → share (code/QR) → cards → swipe → results end-to-end on 2+ devices
 - Wait screens (Butters) when others still submitting/swiping
+- Multi-device completion gate (room completes when all devices finish)
 - Tie-breaker + confetti stable on live rooms
 - Empty/error states with cast characters
 

@@ -1,11 +1,6 @@
 /**
- * Multiplayer over existing Wafflr Supabase schema:
- * - public.rooms (code, mode, status, settings, item_payload, state, expires_at)
- * - public.participants (room_id, device_id, display_name, is_host, is_ready, …)
- *
- * Phase 2: all membership + votes keyed by device_id.
- * Cards live in rooms.item_payload.
- * Votes live in rooms.state.votes [{ card_id, device_id, vote }].
+ * Multiplayer over existing Wafflr Supabase schema.
+ * Phase 2–3: device_id membership, votes, multi-device completion, tie-break.
  */
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -42,6 +37,7 @@ type DbRoom = {
     category?: RoomCategory;
     host_device_id?: string;
     votes?: RemoteVote[];
+    tie_broken?: boolean;
   };
   created_at: string;
   expires_at: string | null;
@@ -116,13 +112,32 @@ function toParticipant(p: DbParticipant): Participant {
   };
 }
 
-/** Card ids this device has already voted on (for swipe resume). */
 export function votedCardIdsForDevice(
   votes: RemoteVote[],
   deviceId?: string
 ): Set<string> {
   const id = deviceId || getDeviceId();
-  return new Set(votes.filter((v) => v.device_id === id).map((v) => v.card_id));
+  return new Set(
+    votes.filter((v) => v.device_id === id && !v.device_id.startsWith("tiebreak:")).map((v) => v.card_id)
+  );
+}
+
+/** Devices that have voted on every card (excludes synthetic tiebreak ids). */
+export function devicesFinishedSwiping(
+  votes: RemoteVote[],
+  cardIds: string[],
+  deviceIds: string[]
+): { finished: string[]; pending: string[] } {
+  const realVotes = votes.filter((v) => !v.device_id.startsWith("tiebreak:"));
+  const finished: string[] = [];
+  const pending: string[] = [];
+  for (const d of deviceIds) {
+    if (!d) continue;
+    const voted = new Set(realVotes.filter((v) => v.device_id === d).map((v) => v.card_id));
+    if (cardIds.length > 0 && cardIds.every((id) => voted.has(id))) finished.push(d);
+    else pending.push(d);
+  }
+  return { finished, pending };
 }
 
 export async function remoteCreateRoom(input: {
@@ -218,10 +233,6 @@ export async function remoteGetByCode(code: string): Promise<{
   };
 }
 
-/**
- * Join or rejoin by device_id.
- * Upserts participant so the same phone never doubles in the lobby.
- */
 export async function remoteJoinRoom(code: string): Promise<Room | null> {
   const packed = await remoteGetByCode(code);
   if (!packed) return null;
@@ -295,7 +306,6 @@ export async function remoteSetStatus(roomId: string, status: RoomStatus) {
     .eq("id", roomId);
 }
 
-/** Upsert vote for this device_id only (one vote per card per device). */
 export async function remoteVote(
   roomId: string,
   cardId: string,
@@ -320,7 +330,48 @@ export async function remoteVote(
     .eq("id", roomId);
 }
 
-/** Ready toggle keyed by device_id. */
+/** After a vote, complete the room only if every participant finished all cards. */
+export async function remoteCompleteIfReady(
+  roomId: string,
+  votes: RemoteVote[],
+  cardIds: string[],
+  participantDeviceIds: string[]
+): Promise<boolean> {
+  const ids = participantDeviceIds.filter(Boolean);
+  if (ids.length === 0) {
+    await remoteSetStatus(roomId, "completed");
+    return true;
+  }
+  const { pending } = devicesFinishedSwiping(votes, cardIds, ids);
+  if (pending.length > 0) return false;
+  await remoteSetStatus(roomId, "completed");
+  return true;
+}
+
+/** Sudden-death: one extra yum on winner, then completed. */
+export async function remoteBreakTie(roomId: string, winnerCardId: string) {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { data: room } = await sb.from("rooms").select("state").eq("id", roomId).single();
+  if (!room) return;
+  const state = (room.state || {}) as DbRoom["state"];
+  const deviceId = getDeviceId();
+  const votes = [...(state.votes || [])];
+  votes.push({
+    card_id: winnerCardId,
+    device_id: `tiebreak:${deviceId}`,
+    vote: "yum",
+  });
+  await sb
+    .from("rooms")
+    .update({
+      state: { ...state, votes, tie_broken: true },
+      status: "completed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", roomId);
+}
+
 export async function remoteSetReady(roomId: string, ready: boolean) {
   const sb = getSupabase();
   if (!sb) return;
@@ -332,7 +383,6 @@ export async function remoteSetReady(roomId: string, ready: boolean) {
     .eq("device_id", deviceId);
 }
 
-/** True if this device is the room host. */
 export function isHostDevice(participants: Participant[], hostDeviceId?: string): boolean {
   const me = getDeviceId();
   if (hostDeviceId) return hostDeviceId === me;

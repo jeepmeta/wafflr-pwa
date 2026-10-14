@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <title>Strawberry Sue idle</title>
+  <defs>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <g filter="url(#soft)">
+    <ellipse cx="128" cy="130" rx="56" ry="62" fill="#EF4444" stroke="#9F1239" stroke-width="4"/>
+    <ellipse cx="118" cy="72" rx="14" ry="8" fill="#22C55E" stroke="#166534" stroke-width="2" transform="rotate(-25 118 72)"/>
+    <ellipse cx="138" cy="70" rx="14" ry="8" fill="#16A34A" stroke="#166534" stroke-width="2" transform="rotate(25 138 70)"/>
+    <circle cx="112" cy="120" r="7" fill="#451A03"/><circle cx="144" cy="120" r="7" fill="#451A03"/>
+    <path d="M 116 145 Q 128 155 140 145" stroke="#451A03" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    <circle cx="100" cy="135" r="7" fill="#FB7185" opacity="0.55"/><circle cx="156" cy="135" r="7" fill="#FB7185" opacity="0.55"/>
+  </g>
+</svg>

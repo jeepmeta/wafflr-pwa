@@ -3,6 +3,7 @@ import { Fredoka, Inter } from "next/font/google";
 import Script from "next/script";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import "./App.css";
 
 const inter = Inter({
@@ -53,6 +54,7 @@ export default function RootLayout({
       <body>
         <div className="app-shell">
           <AppHeader />
+          <OfflineBanner />
           <main className="app-main">{children}</main>
           <InstallPrompt />
         </div>

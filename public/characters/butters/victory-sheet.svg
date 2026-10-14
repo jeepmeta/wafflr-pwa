@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <title>Butters victory</title>
+  <rect x="64" y="56" width="128" height="128" rx="28" fill="#F59E0B" stroke="#78350F" stroke-width="5"/>
+  <g fill="#92400E" opacity="0.5">
+    <rect x="80" y="72" width="28" height="28" rx="6"/><rect x="114" y="72" width="28" height="28" rx="6"/><rect x="148" y="72" width="28" height="28" rx="6"/>
+    <rect x="80" y="106" width="28" height="28" rx="6"/><rect x="114" y="106" width="28" height="28" rx="6"/><rect x="148" y="106" width="28" height="28" rx="6"/>
+  </g>
+  <ellipse cx="128" cy="48" rx="36" ry="14" fill="#FCD34D" stroke="#B45309" stroke-width="3"/>
+  <circle cx="108" cy="100" r="8" fill="#451A03"/><circle cx="148" cy="100" r="8" fill="#451A03"/>
+  <path d="M 112 148 Q 128 162 144 148" stroke="#451A03" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 64 110 Q 36 55 28 40" stroke="#78350F" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 192 110 Q 220 55 228 40" stroke="#78350F" stroke-width="6" fill="none" stroke-linecap="round"/>
+</svg>

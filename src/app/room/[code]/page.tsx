@@ -7,6 +7,7 @@ import { CardSubmit } from "@/components/room/CardSubmit";
 import { Lobby } from "@/components/room/Lobby";
 import { Results } from "@/components/room/Results";
 import { SwipeStack } from "@/components/room/SwipeStack";
+import { WaitScreen } from "@/components/room/WaitScreen";
 import { getJoinedEntry } from "@/lib/joined";
 import { getDeviceId } from "@/lib/device";
 import {
@@ -17,13 +18,16 @@ import {
   type Room,
 } from "@/lib/rooms";
 import {
+  devicesFinishedSwiping,
   isSupabaseConfigured,
+  remoteBreakTie,
   remoteGetByCode,
   remoteJoinRoom,
   remoteSetReady,
   remoteSetStatus,
   subscribeRoom,
   type Participant,
+  type RemoteVote,
 } from "@/lib/remote-rooms";
 
 export default function RoomPage() {
@@ -31,6 +35,7 @@ export default function RoomPage() {
   const code = String(params.code || "").toUpperCase();
   const [room, setRoom] = useState<Room | null | undefined>(undefined);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [votes, setVotes] = useState<RemoteVote[]>([]);
   const [deviceId, setDeviceId] = useState("");
   const [ready, setReady] = useState(false);
   const [live, setLive] = useState(false);
@@ -45,6 +50,7 @@ export default function RoomPage() {
         upsertRoom(packed.room, role);
         setRoom(packed.room);
         setParticipants(packed.participants);
+        setVotes(packed.votes);
         setMyVotedIds(packed.myVotedCardIds);
         setLive(true);
         const me = packed.participants.find((p) => p.device_id === getDeviceId());
@@ -62,6 +68,7 @@ export default function RoomPage() {
     setRoom(local);
     setLive(false);
     setMyVotedIds([]);
+    setVotes([]);
   }, [code]);
 
   useEffect(() => {
@@ -89,8 +96,13 @@ export default function RoomPage() {
     setRoom(next);
   }
 
-  function onBreakTie(winnerId: string) {
+  async function onBreakTie(winnerId: string) {
     if (!room) return;
+    if (isSupabaseConfigured && live) {
+      await remoteBreakTie(room.id, winnerId);
+      await load();
+      return;
+    }
     const boosted = applyVote(room, winnerId, "yum");
     onUpdate(completeRoom(boosted));
   }
@@ -114,15 +126,17 @@ export default function RoomPage() {
     onUpdate({ ...room, status: "swiping" });
   }
 
+  const deviceIds = participants.map((p) => p.device_id).filter(Boolean);
+  const cardIds = room?.cards.map((c) => c.id) || [];
+  const { finished, pending } =
+    room && live
+      ? devicesFinishedSwiping(votes, cardIds, deviceIds)
+      : { finished: [], pending: [] };
+
   if (room === undefined) {
     return (
       <div className="flex items-center justify-center flex-1">
-        <div
-          className="char-frame"
-          style={{
-            backgroundImage: "url(/characters/hugh-blueberry/loading-sheet.svg)",
-          }}
-        />
+        <WaitScreen variant="tally" message="Loading room…" />
       </div>
     );
   }
@@ -180,6 +194,13 @@ export default function RoomPage() {
               Host: start swiping for everyone →
             </button>
           )}
+          {!isHost && room.hostOnlyCards && (
+            <WaitScreen
+              variant="submit"
+              participants={participants}
+              message="Host is building the card list. Sit tight."
+            />
+          )}
         </>
       )}
 
@@ -188,12 +209,20 @@ export default function RoomPage() {
           room={room}
           onUpdate={onUpdate}
           alreadyVotedIds={myVotedIds}
+          participantDeviceIds={deviceIds}
+          votes={votes}
           isHost={isHost}
         />
       )}
 
+      {room.status === "swiping" && live && finished.length > 0 && pending.length > 0 && (
+        <p className="text-center text-[10px] text-muted mt-2">
+          {finished.length}/{deviceIds.length} devices finished swiping
+        </p>
+      )}
+
       {room.status === "completed" && (
-        <Results room={room} onBreakTie={onBreakTie} />
+        <Results room={room} onBreakTie={(id) => void onBreakTie(id)} />
       )}
 
       {room.status === "expired" && (

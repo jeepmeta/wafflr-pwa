@@ -1,6 +1,6 @@
 {
   "name": "wafflr-pwa",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Wafflr — Stop waffling. Start living. Mobile-first swipe-tournament decision PWA.",
   "scripts": {
@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "next": "^15.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

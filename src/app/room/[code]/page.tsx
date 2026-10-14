@@ -10,6 +10,7 @@ import { SwipeStack } from "@/components/room/SwipeStack";
 import { WaitScreen } from "@/components/room/WaitScreen";
 import { getJoinedEntry } from "@/lib/joined";
 import { getDeviceId } from "@/lib/device";
+import { getRoomSnapshotByCode, saveRoomSnapshot } from "@/lib/offline";
 import {
   applyVote,
   completeRoom,
@@ -44,26 +45,33 @@ export default function RoomPage() {
 
   const load = useCallback(async () => {
     if (isSupabaseConfigured) {
-      const packed = await remoteGetByCode(code);
-      if (packed) {
-        const role = getJoinedEntry(code)?.role || "joiner";
-        upsertRoom(packed.room, role);
-        setRoom(packed.room);
-        setParticipants(packed.participants);
-        setVotes(packed.votes);
-        setMyVotedIds(packed.myVotedCardIds);
-        setLive(true);
-        const me = packed.participants.find((p) => p.device_id === getDeviceId());
-        setReady(Boolean(me?.ready));
-        const host = packed.participants.find((p) => p.is_host);
-        setHostDeviceId(host?.device_id);
-        return;
+      try {
+        const packed = await remoteGetByCode(code);
+        if (packed) {
+          const role = getJoinedEntry(code)?.role || "joiner";
+          upsertRoom(packed.room, role);
+          saveRoomSnapshot(packed.room);
+          setRoom(packed.room);
+          setParticipants(packed.participants);
+          setVotes(packed.votes);
+          setMyVotedIds(packed.myVotedCardIds);
+          setLive(true);
+          const me = packed.participants.find((p) => p.device_id === getDeviceId());
+          setReady(Boolean(me?.ready));
+          const host = packed.participants.find((p) => p.is_host);
+          setHostDeviceId(host?.device_id);
+          return;
+        }
+      } catch {
+        // network failure — fall through to snapshot / local
       }
     }
-    const local = getRoomByCode(code) ?? null;
+
+    const local = getRoomByCode(code) ?? getRoomSnapshotByCode(code) ?? null;
     if (local) {
       const role = getJoinedEntry(code)?.role || "joiner";
       upsertRoom(local, role);
+      saveRoomSnapshot(local);
     }
     setRoom(local);
     setLive(false);
@@ -74,11 +82,16 @@ export default function RoomPage() {
   useEffect(() => {
     setDeviceId(getDeviceId());
     void (async () => {
-      if (isSupabaseConfigured) {
-        const remote = await remoteJoinRoom(code);
-        if (remote) {
-          const role = getJoinedEntry(code)?.role || "joiner";
-          upsertRoom(remote, role);
+      if (isSupabaseConfigured && navigator.onLine) {
+        try {
+          const remote = await remoteJoinRoom(code);
+          if (remote) {
+            const role = getJoinedEntry(code)?.role || "joiner";
+            upsertRoom(remote, role);
+            saveRoomSnapshot(remote);
+          }
+        } catch {
+          /* offline join skipped */
         }
       }
       await load();
@@ -94,11 +107,12 @@ export default function RoomPage() {
 
   function onUpdate(next: Room) {
     setRoom(next);
+    saveRoomSnapshot(next);
   }
 
   async function onBreakTie(winnerId: string) {
     if (!room) return;
-    if (isSupabaseConfigured && live) {
+    if (isSupabaseConfigured && live && navigator.onLine) {
       await remoteBreakTie(room.id, winnerId);
       await load();
       return;
@@ -111,8 +125,10 @@ export default function RoomPage() {
     if (!room) return;
     const next = !ready;
     setReady(next);
-    await remoteSetReady(room.id, next);
-    await load();
+    if (navigator.onLine) {
+      await remoteSetReady(room.id, next);
+      await load();
+    }
   }
 
   const isHost =
@@ -122,7 +138,7 @@ export default function RoomPage() {
 
   async function hostStartSwipe() {
     if (!room || !isHost) return;
-    if (isSupabaseConfigured) await remoteSetStatus(room.id, "swiping");
+    if (isSupabaseConfigured && navigator.onLine) await remoteSetStatus(room.id, "swiping");
     onUpdate({ ...room, status: "swiping" });
   }
 
@@ -149,7 +165,7 @@ export default function RoomPage() {
           style={{ backgroundImage: "url(/characters/barron-bacon/error.svg)" }}
         />
         <h1 className="font-display font-bold text-xl mb-2">Room not found</h1>
-        <p className="text-muted text-sm mb-6">Expired or invalid code.</p>
+        <p className="text-muted text-sm mb-6">Expired, invalid, or no offline snapshot.</p>
         <Link href="/" className="btn-primary no-underline">
           Return Home
         </Link>

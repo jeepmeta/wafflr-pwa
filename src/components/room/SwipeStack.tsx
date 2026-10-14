@@ -1,21 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Room, RoomCard } from "@/lib/rooms";
 import { applyVote, completeRoom } from "@/lib/rooms";
-import { getDeviceId } from "@/lib/device";
-import { isSupabaseConfigured, remoteSetStatus, remoteVote } from "@/lib/remote-rooms";
+import {
+  isSupabaseConfigured,
+  remoteCompleteIfReady,
+  remoteVote,
+  type RemoteVote,
+} from "@/lib/remote-rooms";
+import { WaitScreen } from "./WaitScreen";
 
 interface Props {
   room: Room;
   onUpdate: (room: Room) => void;
   alreadyVotedIds?: string[];
+  /** Other phones in the room — used to gate completion. */
+  participantDeviceIds?: string[];
+  /** Latest vote list for completion check. */
+  votes?: RemoteVote[];
   isHost?: boolean;
 }
 
 const THRESHOLD = 100;
 
-export function SwipeStack({ room, onUpdate, alreadyVotedIds = [], isHost = true }: Props) {
+export function SwipeStack({
+  room,
+  onUpdate,
+  alreadyVotedIds = [],
+  participantDeviceIds = [],
+  votes = [],
+  isHost = true,
+}: Props) {
   const cards = room.cards;
   const [index, setIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -44,8 +60,23 @@ export function SwipeStack({ room, onUpdate, alreadyVotedIds = [], isHost = true
       setTimeout(() => {
         void (async () => {
           localVoted.current.add(current.id);
+          let nextVotes = votes;
           if (isSupabaseConfigured) {
             await remoteVote(room.id, current.id, vote);
+            nextVotes = [
+              ...votes.filter(
+                (v) =>
+                  !(v.card_id === current.id && v.device_id === localVoted.current && false)
+              ),
+            ];
+            // Optimistic local vote for completion check
+            const { getDeviceId } = await import("@/lib/device");
+            nextVotes = [
+              ...votes.filter(
+                (v) => !(v.card_id === current.id && v.device_id === getDeviceId())
+              ),
+              { card_id: current.id, device_id: getDeviceId(), vote },
+            ];
           }
           const nextRoom = applyVote(room, current.id, vote);
           let nextIndex = index + 1;
@@ -54,11 +85,30 @@ export function SwipeStack({ room, onUpdate, alreadyVotedIds = [], isHost = true
           }
           setFlyOut(null);
           setOffset({ x: 0, y: 0 });
+
           if (nextIndex >= cards.length) {
-            if (isSupabaseConfigured && isHost) {
-              await remoteSetStatus(room.id, "completed");
+            // This device finished — complete room only if everyone is done
+            if (isSupabaseConfigured) {
+              const cardIds = cards.map((c) => c.id);
+              const ids =
+                participantDeviceIds.length > 0
+                  ? participantDeviceIds
+                  : [(await import("@/lib/device")).getDeviceId()];
+              const allDone = await remoteCompleteIfReady(
+                room.id,
+                nextVotes,
+                cardIds,
+                ids
+              );
+              if (allDone) {
+                onUpdate(completeRoom(nextRoom));
+              } else {
+                onUpdate(nextRoom); // stay in swiping; WaitScreen shows
+              }
+            } else {
+              onUpdate(completeRoom(nextRoom));
             }
-            onUpdate(completeRoom(nextRoom));
+            setIndex(cards.length);
           } else {
             setIndex(nextIndex);
             onUpdate(nextRoom);
@@ -66,7 +116,7 @@ export function SwipeStack({ room, onUpdate, alreadyVotedIds = [], isHost = true
         })();
       }, 220);
     },
-    [current, room, index, cards, onUpdate, isHost]
+    [current, room, index, cards, onUpdate, votes, participantDeviceIds]
   );
 
   function onPointerDown(e: React.PointerEvent) {
@@ -94,25 +144,16 @@ export function SwipeStack({ room, onUpdate, alreadyVotedIds = [], isHost = true
 
   if (!current) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center text-center gap-3">
-        <div
-          className="char-frame"
-          style={{
-            width: 140,
-            height: 140,
-            backgroundImage: "url(/characters/butters/anxious.svg)",
-          }}
-        />
-        <p className="font-display font-bold text-lg">You're done swiping</p>
-        <p className="text-muted text-sm max-w-xs">
-          {isHost
-            ? "Waiting for the room to finish tallying…"
-            : "Hang tight while everyone else finishes."}
-        </p>
-        <p className="text-xs text-muted">
-          {doneCount}/{cards.length} voted on this device
-        </p>
-      </div>
+      <WaitScreen
+        variant="swipe"
+        doneCount={doneCount}
+        totalCount={cards.length}
+        message={
+          isHost
+            ? "You finished — waiting on the rest of the room."
+            : "You finished — hang tight for everyone else."
+        }
+      />
     );
   }
 

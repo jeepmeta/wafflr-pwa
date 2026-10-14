@@ -1,45 +1,61 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Room, RoomCard } from "@/lib/rooms";
 import { applyVote, completeRoom } from "@/lib/rooms";
+import { getDeviceId } from "@/lib/device";
 import { isSupabaseConfigured, remoteSetStatus, remoteVote } from "@/lib/remote-rooms";
 
 interface Props {
   room: Room;
   onUpdate: (room: Room) => void;
+  alreadyVotedIds?: string[];
+  isHost?: boolean;
 }
 
 const THRESHOLD = 100;
 
-export function SwipeStack({ room, onUpdate }: Props) {
+export function SwipeStack({ room, onUpdate, alreadyVotedIds = [], isHost = true }: Props) {
+  const cards = room.cards;
   const [index, setIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [flyOut, setFlyOut] = useState<"left" | "right" | null>(null);
   const start = useRef({ x: 0, y: 0 });
-  const cards = room.cards;
+  const localVoted = useRef(new Set(alreadyVotedIds));
+
+  useEffect(() => {
+    localVoted.current = new Set(alreadyVotedIds);
+    const next = cards.findIndex((c) => !localVoted.current.has(c.id));
+    setIndex(next === -1 ? cards.length : next);
+  }, [alreadyVotedIds, cards]);
+
   const current = cards[index] as RoomCard | undefined;
-  const progress = cards.length ? (index / cards.length) * 100 : 0;
+  const doneCount = cards.filter((c) => localVoted.current.has(c.id)).length;
+  const progress = cards.length ? (doneCount / cards.length) * 100 : 0;
 
   const commit = useCallback(
     (vote: "yum" | "nah") => {
-      if (!current) return;
+      if (!current || localVoted.current.has(current.id)) return;
       if (typeof navigator !== "undefined" && navigator.vibrate) {
         navigator.vibrate([10, 30, 20]);
       }
       setFlyOut(vote === "yum" ? "right" : "left");
       setTimeout(() => {
         void (async () => {
+          localVoted.current.add(current.id);
           if (isSupabaseConfigured) {
             await remoteVote(room.id, current.id, vote);
           }
           const nextRoom = applyVote(room, current.id, vote);
-          const nextIndex = index + 1;
+          let nextIndex = index + 1;
+          while (nextIndex < cards.length && localVoted.current.has(cards[nextIndex].id)) {
+            nextIndex++;
+          }
           setFlyOut(null);
           setOffset({ x: 0, y: 0 });
           if (nextIndex >= cards.length) {
-            if (isSupabaseConfigured) {
+            if (isSupabaseConfigured && isHost) {
               await remoteSetStatus(room.id, "completed");
             }
             onUpdate(completeRoom(nextRoom));
@@ -50,7 +66,7 @@ export function SwipeStack({ room, onUpdate }: Props) {
         })();
       }, 220);
     },
-    [current, room, index, cards.length, onUpdate]
+    [current, room, index, cards, onUpdate, isHost]
   );
 
   function onPointerDown(e: React.PointerEvent) {
@@ -76,7 +92,29 @@ export function SwipeStack({ room, onUpdate }: Props) {
     else setOffset({ x: 0, y: 0 });
   }
 
-  if (!current) return null;
+  if (!current) {
+    return (
+      <div className="flex flex-col flex-1 items-center justify-center text-center gap-3">
+        <div
+          className="char-frame"
+          style={{
+            width: 140,
+            height: 140,
+            backgroundImage: "url(/characters/butters/anxious.svg)",
+          }}
+        />
+        <p className="font-display font-bold text-lg">You're done swiping</p>
+        <p className="text-muted text-sm max-w-xs">
+          {isHost
+            ? "Waiting for the room to finish tallying…"
+            : "Hang tight while everyone else finishes."}
+        </p>
+        <p className="text-xs text-muted">
+          {doneCount}/{cards.length} voted on this device
+        </p>
+      </div>
+    );
+  }
 
   const rot = offset.x * 0.08;
   const flyX = flyOut === "right" ? 480 : flyOut === "left" ? -480 : offset.x;
@@ -88,14 +126,9 @@ export function SwipeStack({ room, onUpdate }: Props) {
         <div className="h-full bg-syrup transition-all duration-300" style={{ width: `${progress}%` }} />
       </div>
       <p className="text-center text-xs text-muted mb-2">
-        {index + 1} / {cards.length}
+        {Math.min(doneCount + 1, cards.length)} / {cards.length}
       </p>
       <div className="relative flex-1 flex items-center justify-center min-h-[280px]">
-        {cards[index + 1] && (
-          <div className="absolute card w-[88%] max-w-sm scale-95 opacity-60 pointer-events-none">
-            <p className="font-display font-bold text-lg">{cards[index + 1].name}</p>
-          </div>
-        )}
         <div
           className="card w-full max-w-sm select-none touch-none cursor-grab active:cursor-grabbing relative z-10"
           style={{
@@ -109,10 +142,14 @@ export function SwipeStack({ room, onUpdate }: Props) {
           onPointerCancel={onPointerUp}
         >
           {offset.x > 40 && !flyOut && (
-            <span className="absolute top-4 left-4 font-display font-bold text-match text-2xl rotate-[-12deg] border-4 border-match rounded-lg px-2 py-1">YUM</span>
+            <span className="absolute top-4 left-4 font-display font-bold text-match text-2xl rotate-[-12deg] border-4 border-match rounded-lg px-2 py-1">
+              YUM
+            </span>
           )}
           {offset.x < -40 && !flyOut && (
-            <span className="absolute top-4 right-4 font-display font-bold text-berry text-2xl rotate-[12deg] border-4 border-berry rounded-lg px-2 py-1">NAH</span>
+            <span className="absolute top-4 right-4 font-display font-bold text-berry text-2xl rotate-[12deg] border-4 border-berry rounded-lg px-2 py-1">
+              NAH
+            </span>
           )}
           <p className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2">{current.skin}</p>
           <p className="font-display font-bold text-2xl mb-2">{current.name}</p>

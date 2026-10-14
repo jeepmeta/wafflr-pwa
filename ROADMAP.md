@@ -27,10 +27,11 @@ No accounts. Device token only. Wheel/dice deferred.
 - Feature flag for future ad-free SKU (`NEXT_PUBLIC_WAFFLR_*` + `isAdFree`)
 - Max one interstitial per browser session
 
-## Phase 5 — Share & growth
-- Results share card (image + code)
-- Native share sheet polish
-- Install prompt / PWA install UX
+## Phase 5 — Share & growth ✅
+- Results share card (canvas PNG + room code)
+- Native share sheet with clipboard fallback
+- Install prompt / PWA install UX (`beforeinstallprompt`)
+- Manifest polish (`start_url`, share_target stub)
 
 ## Phase 6 — Offline & PWA shell
 - SW caches shell + last room snapshot

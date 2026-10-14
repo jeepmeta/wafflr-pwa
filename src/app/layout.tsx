@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fredoka, Inter } from "next/font/google";
 import Script from "next/script";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import "./App.css";
 
 const inter = Inter({
@@ -46,13 +47,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${fredoka.variable}`}>
       <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/characters/butters/hero.svg" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body>
         <div className="app-shell">
           <AppHeader />
           <main className="app-main">{children}</main>
+          <InstallPrompt />
         </div>
         <Script id="sw-register" strategy="afterInteractive">{
           `if ('serviceWorker' in navigator) {

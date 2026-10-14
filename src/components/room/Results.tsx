@@ -6,6 +6,7 @@ import type { Room } from "@/lib/rooms";
 import { isTieTop, rankedCards } from "@/lib/rooms";
 import { PostResultsInterstitial } from "@/components/ads/PostResultsInterstitial";
 import { RewardedRematch } from "@/components/ads/RewardedRematch";
+import { ShareResultsButton } from "@/components/share/ShareResultsButton";
 
 interface Props {
   room: Room;
@@ -79,7 +80,6 @@ export function Results({ room, onBreakTie }: Props) {
   const tie = isTieTop(room);
   const winner = ranked[0];
   const [breaking, setBreaking] = useState(false);
-  /** Interstitial only after a decisive winner — never during sudden death */
   const [adDone, setAdDone] = useState(false);
 
   if (tie && ranked.length >= 2 && onBreakTie) {
@@ -163,6 +163,7 @@ export function Results({ room, onBreakTie }: Props) {
         </ol>
       </div>
       <div className="flex flex-col gap-2 w-full">
+        <ShareResultsButton room={room} />
         <Link href="/create" className="btn-primary no-underline w-full text-center">
           Start new room
         </Link>

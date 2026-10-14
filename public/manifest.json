@@ -2,13 +2,34 @@
   "name": "Wafflr",
   "short_name": "Wafflr",
   "description": "Stop waffling. Start living. Swipe-tournament decisions for groups.",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "display": "standalone",
   "background_color": "#FFFBEB",
   "theme_color": "#F59E0B",
   "orientation": "portrait-primary",
   "icons": [
-    { "src": "/characters/butters/hero.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "/characters/butters/hero.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/wafflr-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
   ],
-  "categories": ["lifestyle", "entertainment", "social"]
+  "categories": ["lifestyle", "entertainment", "social"],
+  "share_target": {
+    "action": "/join",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

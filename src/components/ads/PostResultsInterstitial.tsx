@@ -49,7 +49,7 @@ export function PostResultsInterstitial({ onDone }: Props) {
       role="dialog"
       aria-label="Sponsored"
     >
-      <div className="w-full max-w-sm card !p-0 overflow-hidden shadow-[0_12px_40px_rgba(15,23,42,0.35)]">
+      <div className="w-full max-w-sm card p-0! overflow-hidden shadow-[0_12px_40px_rgba(15,23,42,0.35)]">
         <div className="bg-butter/40 border-b-2 border-obsidian/10 px-3 py-1.5 flex justify-between items-center">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted">Sponsored</span>
           {canSkip ? (

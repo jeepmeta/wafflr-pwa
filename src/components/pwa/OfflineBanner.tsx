@@ -49,7 +49,7 @@ export function OfflineBanner() {
   if (!offline && !flash && !syncing) return null;
 
   return (
-    <div className="fixed top-[60px] inset-x-0 z-30 flex justify-center pointer-events-none px-3">
+    <div className="fixed top-15 inset-x-0 z-30 flex justify-center pointer-events-none px-3">
       <div
         className={`pointer-events-auto text-xs font-semibold px-3 py-1.5 rounded-full border-2 border-obsidian shadow-sm ${
           offline ? "bg-berry text-white" : "bg-match text-white"

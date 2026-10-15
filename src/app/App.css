@@ -1,14 +1,5 @@
-/* Wafflr — single theme, mobile-first, pastel psychology */
 @import "tailwindcss";
 
-/*
-  Color psychology (decision / social play):
-  - Warm cream + peach → calm, lowers choice anxiety
-  - Soft apricot primary → energy without harsh amber glare
-  - Mint → yes / progress / safety
-  - Soft rose → join energy (not aggressive red)
-  - Lavender → group / social collaboration accent
-*/
 @theme {
   --color-syrup: #FFB86C;
   --color-butter: #FFE6A8;
@@ -225,6 +216,6 @@ body {
   to { background-position: -720px center; }
 }
 
-@utility text-balance {
+.text-balance {
   text-wrap: balance;
 }

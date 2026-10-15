@@ -68,7 +68,7 @@ export function InstallPrompt() {
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto max-w-md card !p-3 flex items-center gap-3 shadow-[0_-4px_24px_rgba(15,23,42,0.12)]">
+      <div className="mx-auto max-w-md card p-3! flex items-center gap-3 shadow-[0_-4px_24px_rgba(15,23,42,0.12)]">
         <div
           className="char-frame shrink-0"
           style={{
@@ -81,7 +81,7 @@ export function InstallPrompt() {
           <p className="font-display font-bold text-sm leading-tight">Install Wafflr</p>
           <p className="text-[11px] text-muted truncate">Home screen · faster rooms · offline shell</p>
         </div>
-        <button type="button" className="btn-primary !py-2 !px-3 text-sm shrink-0" onClick={() => void install()}>
+        <button type="button" className="btn-primary py-2! px-3! text-sm shrink-0" onClick={() => void install()}>
           Install
         </button>
         <button

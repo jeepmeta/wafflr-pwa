@@ -79,7 +79,7 @@ export function CardSubmit({ room, onUpdate }: Props) {
       {room.cards.length > 0 && (
         <ul className="flex flex-col gap-2 mb-4 list-none p-0 m-0 max-h-36 overflow-y-auto">
           {room.cards.map((c) => (
-            <li key={c.id} className="card !p-3 !border-2 flex justify-between gap-2">
+            <li key={c.id} className="card p-3! border-2! flex justify-between gap-2">
               <div>
                 <p className="font-semibold text-sm">{c.name}</p>
                 {c.detail && <p className="text-xs text-muted">{c.detail}</p>}
@@ -102,7 +102,7 @@ export function CardSubmit({ room, onUpdate }: Props) {
           autoFocus
         />
         <input
-          className="input-lg !min-h-12"
+          className="input-lg min-h-12!"
           placeholder="Detail (optional)"
           value={detail}
           onChange={(e) => setDetail(e.target.value)}

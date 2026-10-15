@@ -42,7 +42,7 @@ export function AppHeader() {
       <Link href="/rooms" className="pill no-underline text-obsidian flex items-center gap-1.5">
         Your Rooms
         {count > 0 && (
-          <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-syrup text-obsidian text-[10px] font-bold border border-obsidian">
+          <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-syrup text-obsidian text-[10px] font-bold border border-obsidian">
             {count}
           </span>
         )}

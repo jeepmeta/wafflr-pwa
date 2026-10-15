@@ -11,7 +11,7 @@ interface Props {
 
 export function Lobby({ participants, deviceId, onReady, ready }: Props) {
   return (
-    <div className="card !p-3 mb-4">
+    <div className="card p-3! mb-4">
       <p className="font-display font-semibold text-sm mb-2">
         Lobby · {participants.length} here
       </p>

@@ -161,7 +161,7 @@ export function SwipeStack({
       <p className="text-center text-xs text-muted mb-2">
         {Math.min(doneCount + 1, cards.length)} / {cards.length}
       </p>
-      <div className="relative flex-1 flex items-center justify-center min-h-[280px]">
+      <div className="relative flex-1 flex items-center justify-center min-h-70">
         <div
           className="card w-full max-w-sm select-none touch-none cursor-grab active:cursor-grabbing relative z-10"
           style={{
@@ -175,12 +175,12 @@ export function SwipeStack({
           onPointerCancel={onPointerUp}
         >
           {offset.x > 40 && !flyOut && (
-            <span className="absolute top-4 left-4 font-display font-bold text-match text-2xl rotate-[-12deg] border-4 border-match rounded-lg px-2 py-1">
+            <span className="absolute top-4 left-4 font-display font-bold text-match text-2xl -rotate-12 border-4 border-match rounded-lg px-2 py-1">
               YUM
             </span>
           )}
           {offset.x < -40 && !flyOut && (
-            <span className="absolute top-4 right-4 font-display font-bold text-berry text-2xl rotate-[12deg] border-4 border-berry rounded-lg px-2 py-1">
+            <span className="absolute top-4 right-4 font-display font-bold text-berry text-2xl rotate-12 border-4 border-berry rounded-lg px-2 py-1">
               NAH
             </span>
           )}

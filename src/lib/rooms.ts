@@ -32,6 +32,9 @@ export interface Room {
   maxCardsPerJoiner: 1 | 2 | 3;
   cards: RoomCard[];
   participantIds: string[];
+  /** Phase 8 — mass-vote room */
+  isBroadcast?: boolean;
+  viewerCount?: number;
 }
 
 export const ROOM_LIFETIME_MS = 2 * 60 * 60 * 1000;
@@ -66,7 +69,8 @@ export function createRoomDraft(
   category: RoomCategory,
   title: string,
   hostOnlyCards: boolean,
-  maxCardsPerJoiner: 1 | 2 | 3 = 2
+  maxCardsPerJoiner: 1 | 2 | 3 = 2,
+  isBroadcast = false
 ): Room {
   const now = Date.now();
   const code = generateCode();
@@ -90,6 +94,8 @@ export function createRoomDraft(
     maxCardsPerJoiner,
     cards: [],
     participantIds: [],
+    isBroadcast,
+    viewerCount: 1,
   };
 }
 
@@ -120,7 +126,6 @@ export function saveRooms(rooms: Room[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
 }
 
-/** Persist full room snapshot + touch joined registry (keeps role if already joined). */
 export function upsertRoom(room: Room, role?: "host" | "joiner") {
   const rooms = loadRooms().filter((r) => r.id !== room.id && r.code !== room.code);
   rooms.unshift(room);

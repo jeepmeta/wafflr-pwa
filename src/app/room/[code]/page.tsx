@@ -63,7 +63,7 @@ export default function RoomPage() {
           return;
         }
       } catch {
-        // network failure — fall through to snapshot / local
+        /* fall through */
       }
     }
 
@@ -91,7 +91,7 @@ export default function RoomPage() {
             saveRoomSnapshot(remote);
           }
         } catch {
-          /* offline join skipped */
+          /* offline */
         }
       }
       await load();
@@ -136,16 +136,28 @@ export default function RoomPage() {
     participants.some((p) => p.device_id === deviceId && p.is_host) ||
     getJoinedEntry(code)?.role === "host";
 
+  const isBroadcast = Boolean(room?.isBroadcast);
+
   async function hostStartSwipe() {
     if (!room || !isHost) return;
     if (isSupabaseConfigured && navigator.onLine) await remoteSetStatus(room.id, "swiping");
     onUpdate({ ...room, status: "swiping" });
   }
 
+  async function hostRevealResults() {
+    if (!room || !isHost) return;
+    if (isSupabaseConfigured && navigator.onLine) {
+      await remoteSetStatus(room.id, "completed");
+      await load();
+      return;
+    }
+    onUpdate(completeRoom(room));
+  }
+
   const deviceIds = participants.map((p) => p.device_id).filter(Boolean);
   const cardIds = room?.cards.map((c) => c.id) || [];
   const { finished, pending } =
-    room && live
+    room && live && !isBroadcast
       ? devicesFinishedSwiping(votes, cardIds, deviceIds)
       : { finished: [], pending: [] };
 
@@ -182,14 +194,22 @@ export default function RoomPage() {
             {room.code}
             {live ? " · live" : " · local"}
             {isHost ? " · host" : ""}
+            {isBroadcast ? " · broadcast" : ""}
           </p>
         </div>
-        <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-surface border-2 border-obsidian whitespace-nowrap">
-          {room.status}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-surface border-2 border-obsidian whitespace-nowrap">
+            {room.status}
+          </span>
+          {isBroadcast && typeof room.viewerCount === "number" && (
+            <span className="text-[10px] font-semibold text-lavender px-2">
+              {room.viewerCount.toLocaleString()} joined
+            </span>
+          )}
+        </div>
       </div>
 
-      {live && (room.status === "drafting" || room.status === "submitting") && (
+      {live && !isBroadcast && (room.status === "drafting" || room.status === "submitting") && (
         <Lobby
           participants={participants}
           deviceId={deviceId}
@@ -198,9 +218,20 @@ export default function RoomPage() {
         />
       )}
 
+      {isBroadcast && live && (room.status === "drafting" || room.status === "submitting") && (
+        <div className="card !p-3 mb-3 text-center">
+          <p className="font-display font-semibold text-sm">Broadcast lobby</p>
+          <p className="text-xs text-muted mt-1">
+            {(room.viewerCount ?? 0).toLocaleString()} devices connected · host controls the cards
+          </p>
+        </div>
+      )}
+
       {(room.status === "drafting" || room.status === "submitting") && (
         <>
-          <CardSubmit room={room} onUpdate={onUpdate} />
+          {(isHost || !room.hostOnlyCards) && (
+            <CardSubmit room={room} onUpdate={onUpdate} />
+          )}
           {isHost && room.cards.length >= 2 && (
             <button
               type="button"
@@ -213,25 +244,39 @@ export default function RoomPage() {
           {!isHost && room.hostOnlyCards && (
             <WaitScreen
               variant="submit"
-              participants={participants}
-              message="Host is building the card list. Sit tight."
+              message={
+                isBroadcast
+                  ? "Host is setting the cards. Swiping opens when they start the room."
+                  : "Host is building the card list. Sit tight."
+              }
             />
           )}
         </>
       )}
 
       {room.status === "swiping" && (
-        <SwipeStack
-          room={room}
-          onUpdate={onUpdate}
-          alreadyVotedIds={myVotedIds}
-          participantDeviceIds={deviceIds}
-          votes={votes}
-          isHost={isHost}
-        />
+        <>
+          <SwipeStack
+            room={room}
+            onUpdate={onUpdate}
+            alreadyVotedIds={myVotedIds}
+            participantDeviceIds={isBroadcast ? [] : deviceIds}
+            votes={votes}
+            isHost={isHost && !isBroadcast}
+          />
+          {isHost && isBroadcast && (
+            <button
+              type="button"
+              className="btn-primary w-full mt-3"
+              onClick={() => void hostRevealResults()}
+            >
+              Host: reveal results →
+            </button>
+          )}
+        </>
       )}
 
-      {room.status === "swiping" && live && finished.length > 0 && pending.length > 0 && (
+      {room.status === "swiping" && live && !isBroadcast && finished.length > 0 && pending.length > 0 && (
         <p className="text-center text-[10px] text-muted mt-2">
           {finished.length}/{deviceIds.length} devices finished swiping
         </p>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Room } from "@/lib/rooms";
 import { addCard, startSwiping } from "@/lib/rooms";
+import { getDeviceId } from "@/lib/device";
 import {
   isSupabaseConfigured,
   remoteAddCard,
@@ -12,16 +13,29 @@ import {
 interface Props {
   room: Room;
   onUpdate: (room: Room) => void;
+  /** When false, hide host-only start-swipe control (parent may own it). */
+  showStartSwipe?: boolean;
 }
 
-export function CardSubmit({ room, onUpdate }: Props) {
+export function CardSubmit({ room, onUpdate, showStartSwipe = false }: Props) {
   const [name, setName] = useState("");
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const deviceId = useMemo(() => getDeviceId(), []);
+
+  const myCardCount = room.cards.filter((c) => c.authorDeviceId === deviceId).length;
+  const limit = room.hostOnlyCards ? Infinity : room.maxCardsPerJoiner;
+  const atLimit = myCardCount >= limit;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     if (!name.trim() || busy) return;
+    if (atLimit) {
+      setError(`You can add up to ${room.maxCardsPerJoiner} card${room.maxCardsPerJoiner === 1 ? "" : "s"}.`);
+      return;
+    }
     setBusy(true);
     try {
       if (isSupabaseConfigured) {
@@ -30,7 +44,7 @@ export function CardSubmit({ room, onUpdate }: Props) {
           onUpdate({
             ...room,
             status: room.status === "drafting" ? "submitting" : room.status,
-            cards: [...room.cards, card],
+            cards: [...room.cards, { ...card, authorDeviceId: deviceId }],
           });
           setName("");
           setDetail("");
@@ -39,8 +53,10 @@ export function CardSubmit({ room, onUpdate }: Props) {
           }
           return;
         }
+        setError("Couldn’t save card to the live room. Try again.");
+        return;
       }
-      const next = addCard(room, name, detail);
+      const next = addCard(room, name, detail, deviceId);
       onUpdate(next);
       setName("");
       setDetail("");
@@ -54,8 +70,13 @@ export function CardSubmit({ room, onUpdate }: Props) {
 
   async function goSwipe() {
     if (room.cards.length < 2) return;
+    setError(null);
     if (isSupabaseConfigured) {
-      await remoteSetStatus(room.id, "swiping");
+      const ok = await remoteSetStatus(room.id, "swiping");
+      if (!ok) {
+        setError("Couldn’t start swiping on the server. Check connection.");
+        return;
+      }
     }
     const next = startSwiping(room);
     onUpdate(next);
@@ -74,6 +95,11 @@ export function CardSubmit({ room, onUpdate }: Props) {
       <h2 className="font-display font-bold text-xl text-center mb-1">Add options</h2>
       <p className="text-muted text-sm text-center mb-4">
         {room.cards.length} card{room.cards.length === 1 ? "" : "s"} in the pool
+        {!room.hostOnlyCards && (
+          <span className="block text-xs mt-1">
+            Your cards: {myCardCount}/{room.maxCardsPerJoiner}
+          </span>
+        )}
       </p>
 
       {room.cards.length > 0 && (
@@ -92,35 +118,49 @@ export function CardSubmit({ room, onUpdate }: Props) {
         </ul>
       )}
 
-      <form onSubmit={submit} className="flex flex-col gap-2 mb-4">
-        <input
-          className="input-lg"
-          placeholder="Name (e.g. Luigi's Pizzeria)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={60}
-          autoFocus
-        />
-        <input
-          className="input-lg min-h-12!"
-          placeholder="Detail (optional)"
-          value={detail}
-          onChange={(e) => setDetail(e.target.value)}
-          maxLength={80}
-        />
-        <button type="submit" className="btn-primary w-full" disabled={!name.trim() || busy}>
-          {busy ? "Adding…" : "Add card"}
-        </button>
-      </form>
+      {atLimit ? (
+        <p className="text-sm text-center text-muted mb-4">
+          You’ve hit your card limit for this room.
+        </p>
+      ) : (
+        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-2 mb-4">
+          <label className="sr-only" htmlFor="card-name">
+            Option name
+          </label>
+          <input
+            id="card-name"
+            className="input-lg"
+            placeholder="Name (e.g. Luigi&apos;s Pizzeria)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            autoComplete="off"
+          />
+          <label className="sr-only" htmlFor="card-detail">
+            Optional detail
+          </label>
+          <input
+            id="card-detail"
+            className="input-lg"
+            placeholder="Detail (optional)"
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            maxLength={80}
+            autoComplete="off"
+          />
+          <button type="submit" className="btn-primary w-full" disabled={busy || !name.trim()}>
+            {busy ? "Adding…" : "Add card"}
+          </button>
+        </form>
+      )}
 
-      <button
-        type="button"
-        className="btn-match w-full"
-        disabled={room.cards.length < 2}
-        onClick={() => void goSwipe()}
-      >
-        {room.cards.length < 2 ? "Need at least 2 cards" : "Start swiping →"}
-      </button>
+      {error && <p className="text-sm text-berry text-center mb-3">{error}</p>}
+
+      {showStartSwipe && room.cards.length >= 2 && (
+        <button type="button" className="btn-match w-full" onClick={() => void goSwipe()}>
+          Start swiping →
+        </button>
+      )}
     </div>
   );
 }

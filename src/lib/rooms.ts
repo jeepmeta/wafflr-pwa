@@ -18,6 +18,8 @@ export interface RoomCard {
   skin?: string;
   yum: number;
   nah: number;
+  /** Device that submitted this card (for maxCardsPerJoiner). */
+  authorDeviceId?: string;
 }
 
 export interface Room {
@@ -32,13 +34,21 @@ export interface Room {
   maxCardsPerJoiner: 1 | 2 | 3;
   cards: RoomCard[];
   participantIds: string[];
-  /** Phase 8 — mass-vote room */
   isBroadcast?: boolean;
   viewerCount?: number;
 }
 
 export const ROOM_LIFETIME_MS = 2 * 60 * 60 * 1000;
 export const PURGE_AFTER_MS = 60 * 60 * 1000;
+
+const STATUSES: RoomStatus[] = [
+  "drafting",
+  "submitting",
+  "swiping",
+  "completed",
+  "expired",
+];
+const CATEGORIES: RoomCategory[] = ["eat", "watch", "do", "custom"];
 
 export function generateCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -63,6 +73,67 @@ export function pickSkin(name: string, detail?: string): string {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h + key.charCodeAt(i) * (i + 1)) % SKINS.length;
   return SKINS[h];
+}
+
+function asStatus(v: unknown): RoomStatus {
+  return STATUSES.includes(v as RoomStatus) ? (v as RoomStatus) : "drafting";
+}
+
+function asCategory(v: unknown): RoomCategory {
+  return CATEGORIES.includes(v as RoomCategory) ? (v as RoomCategory) : "custom";
+}
+
+function asMaxCards(v: unknown): 1 | 2 | 3 {
+  const n = Number(v);
+  if (n === 1 || n === 2 || n === 3) return n;
+  return 2;
+}
+
+/** Normalize unknown JSON into a Room; returns null if unusable. */
+export function normalizeRoom(raw: unknown): Room | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.code !== "string") return null;
+  const cardsIn = Array.isArray(r.cards) ? r.cards : [];
+  const cards: RoomCard[] = cardsIn
+    .map((c) => {
+      if (!c || typeof c !== "object") return null;
+      const card = c as Record<string, unknown>;
+      if (typeof card.id !== "string" || typeof card.name !== "string") return null;
+      return {
+        id: card.id,
+        name: String(card.name).slice(0, 80),
+        detail: typeof card.detail === "string" ? card.detail.slice(0, 120) : undefined,
+        skin: typeof card.skin === "string" ? card.skin : pickSkin(String(card.name)),
+        yum: Math.max(0, Number(card.yum) || 0),
+        nah: Math.max(0, Number(card.nah) || 0),
+        authorDeviceId:
+          typeof card.authorDeviceId === "string" ? card.authorDeviceId : undefined,
+      } satisfies RoomCard;
+    })
+    .filter(Boolean) as RoomCard[];
+
+  const now = Date.now();
+  const createdAt = Number(r.createdAt) || now;
+  const expiresAt = Number(r.expiresAt) || createdAt + ROOM_LIFETIME_MS;
+
+  return {
+    id: r.id,
+    code: String(r.code).toUpperCase().slice(0, 8),
+    title: typeof r.title === "string" ? r.title.slice(0, 80) : "Wafflr room",
+    category: asCategory(r.category),
+    status: asStatus(r.status),
+    createdAt,
+    expiresAt,
+    hostOnlyCards: Boolean(r.hostOnlyCards ?? true),
+    maxCardsPerJoiner: asMaxCards(r.maxCardsPerJoiner),
+    cards,
+    participantIds: Array.isArray(r.participantIds)
+      ? (r.participantIds as unknown[]).filter((x) => typeof x === "string") as string[]
+      : [],
+    isBroadcast: Boolean(r.isBroadcast),
+    viewerCount: Math.max(0, Number(r.viewerCount) || 0),
+  };
 }
 
 export function createRoomDraft(
@@ -106,15 +177,15 @@ export function loadRooms(): Room[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const rooms = JSON.parse(raw) as Room[];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
     const now = Date.now();
-    return rooms
-      .map((r) => {
-        if (now >= r.expiresAt && r.status !== "expired") {
-          return { ...r, status: "expired" as const };
-        }
-        return r;
-      })
+    return parsed
+      .map(normalizeRoom)
+      .filter((r): r is Room => r !== null)
+      .map((r) =>
+        now >= r.expiresAt && r.status !== "expired" ? { ...r, status: "expired" as const } : r
+      )
       .filter((r) => now < r.expiresAt + PURGE_AFTER_MS);
   } catch {
     return [];
@@ -123,7 +194,11 @@ export function loadRooms(): Room[] {
 
 export function saveRooms(rooms: Room[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+  } catch {
+    /* quota / private mode */
+  }
 }
 
 export function upsertRoom(room: Room, role?: "host" | "joiner") {
@@ -143,9 +218,7 @@ export function upsertRoom(room: Room, role?: "host" | "joiner") {
 }
 
 export function getRoomByCode(code: string): Room | undefined {
-  return loadRooms().find(
-    (r) => r.code.toUpperCase() === code.toUpperCase()
-  );
+  return loadRooms().find((r) => r.code.toUpperCase() === code.toUpperCase());
 }
 
 export function remainingMs(room: { expiresAt: number }): number {
@@ -158,7 +231,16 @@ export function formatRemaining(ms: number): string {
   return `${m}m`;
 }
 
-export function addCard(room: Room, name: string, detail?: string): Room {
+export function addCard(
+  room: Room,
+  name: string,
+  detail?: string,
+  authorDeviceId?: string
+): Room {
+  if (!room.hostOnlyCards && authorDeviceId) {
+    const mine = room.cards.filter((c) => c.authorDeviceId === authorDeviceId).length;
+    if (mine >= room.maxCardsPerJoiner) return room;
+  }
   const card: RoomCard = {
     id: crypto.randomUUID(),
     name: name.trim(),
@@ -166,6 +248,7 @@ export function addCard(room: Room, name: string, detail?: string): Room {
     skin: pickSkin(name, detail),
     yum: 0,
     nah: 0,
+    authorDeviceId,
   };
   const next: Room = {
     ...room,

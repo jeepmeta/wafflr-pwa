@@ -4,6 +4,7 @@ import Script from "next/script";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { OfflineBanner } from "@/components/pwa/OfflineBanner";
+import { StoreProvider } from "@/components/store/StoreProvider";
 import "./App.css";
 
 const inter = Inter({
@@ -52,12 +53,14 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body>
-        <div className="app-shell">
-          <AppHeader />
-          <OfflineBanner />
-          <main className="app-main">{children}</main>
-          <InstallPrompt />
-        </div>
+        <StoreProvider>
+          <div className="app-shell">
+            <AppHeader />
+            <OfflineBanner />
+            <main className="app-main">{children}</main>
+            <InstallPrompt />
+          </div>
+        </StoreProvider>
         <Script id="sw-register" strategy="afterInteractive">{
           `if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {

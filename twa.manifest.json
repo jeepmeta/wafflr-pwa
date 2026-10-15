@@ -1,0 +1,32 @@
+{
+  "packageId": "app.wafflr.decision",
+  "host": "wafflr.app",
+  "name": "Wafflr",
+  "launcherName": "Wafflr",
+  "display": "standalone",
+  "themeColor": "#F59E0B",
+  "navigationColor": "#FFFBEB",
+  "navigationColorDark": "#0F172A",
+  "backgroundColor": "#FFFBEB",
+  "enableNotifications": false,
+  "startUrl": "/?source=twa",
+  "iconUrl": "/characters/butters/hero.svg",
+  "maskableIconUrl": "/wafflr-mark.svg",
+  "shortcuts": [],
+  "generatorApp": "bubblewrap",
+  "webManifestUrl": "https://wafflr.app/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://wafflr.app/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedData": []
+}

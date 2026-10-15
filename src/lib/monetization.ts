@@ -1,6 +1,7 @@
 /**
  * Soft monetization — post-results only. Never mid-swipe / mid-submit.
  * Real ad SDKs plug into showInterstitial / showRewarded later.
+ * Ad-free entitlement is shared with store IAP (`src/lib/iap.ts`).
  */
 
 const AD_FREE_KEY = "wafflr_ad_free_v1";
@@ -14,8 +15,10 @@ export const MONETIZATION = {
   interstitialEnabled: process.env.NEXT_PUBLIC_WAFFLR_INTERSTITIAL !== "0",
   /** Rewarded path for rematch / extra slot */
   rewardedEnabled: process.env.NEXT_PUBLIC_WAFFLR_REWARDED !== "0",
-  /** Future paid SKU — when true, skip all ads */
-  adFreeSkuEnabled: process.env.NEXT_PUBLIC_WAFFLR_AD_FREE_SKU === "1",
+  /** Paid SKU surface — enable to honor isAdFree / paywall */
+  adFreeSkuEnabled:
+    process.env.NEXT_PUBLIC_WAFFLR_AD_FREE_SKU === "1" ||
+    process.env.NEXT_PUBLIC_WAFFLR_IAP_SIMULATE === "1",
   /** Min ms on results before interstitial can appear */
   interstitialDelayMs: 1200,
   /** Placeholder “ad” duration */
@@ -25,17 +28,16 @@ export const MONETIZATION = {
 
 export function isAdFree(): boolean {
   if (typeof window === "undefined") return false;
-  if (MONETIZATION.adFreeSkuEnabled) {
-    try {
-      return localStorage.getItem(AD_FREE_KEY) === "1";
-    } catch {
-      return false;
-    }
+  try {
+    // Always honor local entitlement if present (IAP or promo)
+    if (localStorage.getItem(AD_FREE_KEY) === "1") return true;
+  } catch {
+    /* ignore */
   }
   return false;
 }
 
-/** Dev / future IAP: toggle ad-free entitlement on this device. */
+/** Dev / IAP: toggle ad-free entitlement on this device. */
 export function setAdFree(on: boolean) {
   if (typeof window === "undefined") return;
   try {
@@ -51,7 +53,6 @@ export function shouldShowPostResultsInterstitial(): boolean {
   if (isAdFree()) return false;
   if (typeof window === "undefined") return false;
   try {
-    // At most one interstitial per browser session
     if (sessionStorage.getItem(INTERSTITIAL_SESSION_KEY) === "1") return false;
   } catch {
     /* ignore */
@@ -70,15 +71,16 @@ export function markInterstitialShown() {
 
 export function canOfferRewardedRematch(): boolean {
   if (!MONETIZATION.adsEnabled || !MONETIZATION.rewardedEnabled) return false;
-  if (isAdFree()) return true; // ad-free users get rematch free
+  if (isAdFree()) return true;
   return true;
 }
 
 /**
  * Placeholder rewarded flow. Replace body with AdMob / AdSense rewarded unit.
- * Resolves true if reward should be granted.
  */
-export async function playRewardedPlaceholder(minMs = MONETIZATION.rewardedMinViewMs): Promise<boolean> {
+export async function playRewardedPlaceholder(
+  minMs = MONETIZATION.rewardedMinViewMs
+): Promise<boolean> {
   if (isAdFree()) return true;
   await new Promise((r) => setTimeout(r, minMs));
   return true;

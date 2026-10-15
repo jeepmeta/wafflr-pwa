@@ -1,13 +1,18 @@
 {
   "name": "wafflr-pwa",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Wafflr — Stop waffling. Start living. Mobile-first swipe-tournament decision PWA.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "cap:sync": "npx cap sync",
+    "cap:ios": "npx cap open ios",
+    "cap:android": "npx cap open android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:add:android": "npx cap add android"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
@@ -23,5 +28,10 @@
     "postcss": "^8.5.30",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.2"
+  },
+  "optionalDependencies": {},
+  "capacitor": {
+    "appId": "app.wafflr.decision",
+    "appName": "Wafflr"
   }
 }

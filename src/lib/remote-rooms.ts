@@ -100,6 +100,8 @@ function toRoom(r: DbRoom): Room {
     ? applyTalliesToCards(raw, tallies)
     : tallyCards(raw, votes);
   const settings = r.settings || {};
+  const maxRaw = Number(settings.max_cards_per_joiner);
+  const maxCards: 1 | 2 | 3 = maxRaw === 1 || maxRaw === 2 || maxRaw === 3 ? maxRaw : 2;
   return {
     id: r.id,
     code: r.code,
@@ -111,7 +113,7 @@ function toRoom(r: DbRoom): Room {
       ? new Date(r.expires_at).getTime()
       : Date.now() + ROOM_LIFETIME_MS,
     hostOnlyCards: Boolean(settings.host_only_cards ?? true),
-    maxCardsPerJoiner: (Number(settings.max_cards_per_joiner) || 2) as 1 | 2 | 3,
+    maxCardsPerJoiner: maxCards,
     cards,
     participantIds: [],
     isBroadcast,
@@ -236,21 +238,19 @@ export async function remoteGetByCode(code: string): Promise<{
   const sb = getSupabase();
   if (!sb) return null;
 
-  // Prefer snapshot RPC (works for broadcast + small rooms)
   const snap = await rpcRoomSnapshot(code);
   if (snap) {
     let myVoted: string[] = [];
     if (snap.isBroadcast) {
       myVoted = await fetchMyVotedCardIds(snap.room.id);
     }
-    let participants: Participant[] = [];
     if (!snap.isBroadcast) {
       const { data: parts } = await sb
         .from("participants")
         .select("*")
         .eq("room_id", snap.room.id)
         .limit(100);
-      participants = ((parts || []) as DbParticipant[]).map(toParticipant);
+      const participants = ((parts || []) as DbParticipant[]).map(toParticipant);
       const { data: roomRow } = await sb
         .from("rooms")
         .select("state")
@@ -306,7 +306,6 @@ export async function remoteJoinRoom(code: string): Promise<Room | null> {
   const sb = getSupabase();
   if (!sb) return null;
 
-  // Fast path for any room via broadcast join RPC (bumps viewer when new)
   const joined = await rpcJoinBroadcast(code);
   if (joined?.ok) {
     const packed = await remoteGetByCode(code);
@@ -345,9 +344,24 @@ export async function remoteAddCard(
 ): Promise<RoomCard | null> {
   const sb = getSupabase();
   if (!sb) return null;
+  const deviceId = getDeviceId();
   const { data: room, error } = await sb.from("rooms").select("*").eq("id", roomId).single();
   if (error || !room) return null;
   const db = room as DbRoom;
+  const settings = db.settings || {};
+  const hostOnly = Boolean(settings.host_only_cards ?? true);
+  const maxRaw = Number(settings.max_cards_per_joiner);
+  const maxCards = maxRaw === 1 || maxRaw === 2 || maxRaw === 3 ? maxRaw : 2;
+
+  if (!hostOnly) {
+    const payload = Array.isArray(db.item_payload) ? db.item_payload : [];
+    const mine = payload.filter((c) => c.authorDeviceId === deviceId).length;
+    if (mine >= maxCards) {
+      console.error("remoteAddCard: max cards reached for device");
+      return null;
+    }
+  }
+
   const card: RoomCard = {
     id: crypto.randomUUID(),
     name: name.trim(),
@@ -355,6 +369,7 @@ export async function remoteAddCard(
     skin: pickSkin(name, detail),
     yum: 0,
     nah: 0,
+    authorDeviceId: deviceId,
   };
   const payload = Array.isArray(db.item_payload) ? [...db.item_payload, card] : [card];
   const tallies = { ...(db.vote_tallies || {}), [card.id]: { yum: 0, nah: 0 } };
@@ -374,13 +389,22 @@ export async function remoteAddCard(
   return card;
 }
 
-export async function remoteSetStatus(roomId: string, status: RoomStatus) {
+/** @returns true when the status write succeeded */
+export async function remoteSetStatus(
+  roomId: string,
+  status: RoomStatus
+): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) return;
-  await sb
+  if (!sb) return false;
+  const { error } = await sb
     .from("rooms")
     .update({ status: toDbStatus(status), updated_at: new Date().toISOString() })
     .eq("id", roomId);
+  if (error) {
+    console.error("remoteSetStatus", error);
+    return false;
+  }
+  return true;
 }
 
 export async function remoteVote(
@@ -391,11 +415,9 @@ export async function remoteVote(
   const sb = getSupabase();
   if (!sb) return;
 
-  // Prefer atomic RPC (broadcast + scales for small rooms too)
   const viaRpc = await rpcCastVote(roomId, cardId, vote);
   if (viaRpc) return;
 
-  // Fallback: legacy state.votes array
   const { data: room } = await sb.from("rooms").select("state").eq("id", roomId).single();
   if (!room) return;
   const state = (room.state || {}) as DbRoom["state"];
@@ -426,31 +448,22 @@ export async function remoteCompleteIfReady(
     .select("is_broadcast")
     .eq("id", roomId)
     .maybeSingle();
-  // Broadcast rooms: host reveals manually — never auto-complete on one device
   if (data?.is_broadcast) return false;
 
   const ids = participantDeviceIds.filter(Boolean);
   if (ids.length === 0) {
-    await remoteSetStatus(roomId, "completed");
-    return true;
+    return remoteSetStatus(roomId, "completed");
   }
   const { pending } = devicesFinishedSwiping(votes, cardIds, ids);
   if (pending.length > 0) return false;
-  await remoteSetStatus(roomId, "completed");
-  return true;
+  return remoteSetStatus(roomId, "completed");
 }
 
 export async function remoteBreakTie(roomId: string, winnerCardId: string) {
   const sb = getSupabase();
   if (!sb) return;
   await rpcCastVote(roomId, winnerCardId, "yum");
-  await sb
-    .from("rooms")
-    .update({
-      status: "completed",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", roomId);
+  await remoteSetStatus(roomId, "completed");
 }
 
 export async function remoteSetReady(roomId: string, ready: boolean) {

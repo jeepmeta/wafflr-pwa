@@ -42,6 +42,7 @@ export default function RoomPage() {
   const [live, setLive] = useState(false);
   const [myVotedIds, setMyVotedIds] = useState<string[]>([]);
   const [hostDeviceId, setHostDeviceId] = useState<string | undefined>();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (isSupabaseConfigured) {
@@ -54,7 +55,10 @@ export default function RoomPage() {
           setRoom(packed.room);
           setParticipants(packed.participants);
           setVotes(packed.votes);
-          setMyVotedIds(packed.myVotedCardIds);
+          // Merge server ids with any optimistic progress (never wipe)
+          setMyVotedIds((prev) => [
+            ...new Set([...prev, ...packed.myVotedCardIds]),
+          ]);
           setLive(true);
           const me = packed.participants.find((p) => p.device_id === getDeviceId());
           setReady(Boolean(me?.ready));
@@ -75,7 +79,6 @@ export default function RoomPage() {
     }
     setRoom(local);
     setLive(false);
-    setMyVotedIds([]);
     setVotes([]);
   }, [code]);
 
@@ -110,6 +113,10 @@ export default function RoomPage() {
     saveRoomSnapshot(next);
   }
 
+  function onVoted(cardId: string) {
+    setMyVotedIds((prev) => (prev.includes(cardId) ? prev : [...prev, cardId]));
+  }
+
   async function onBreakTie(winnerId: string) {
     if (!room) return;
     if (isSupabaseConfigured && live && navigator.onLine) {
@@ -140,14 +147,26 @@ export default function RoomPage() {
 
   async function hostStartSwipe() {
     if (!room || !isHost) return;
-    if (isSupabaseConfigured && navigator.onLine) await remoteSetStatus(room.id, "swiping");
+    setActionError(null);
+    if (isSupabaseConfigured && navigator.onLine) {
+      const ok = await remoteSetStatus(room.id, "swiping");
+      if (!ok) {
+        setActionError("Couldn’t start swiping on the server. Try again.");
+        return;
+      }
+    }
     onUpdate({ ...room, status: "swiping" });
   }
 
   async function hostRevealResults() {
     if (!room || !isHost) return;
+    setActionError(null);
     if (isSupabaseConfigured && navigator.onLine) {
-      await remoteSetStatus(room.id, "completed");
+      const ok = await remoteSetStatus(room.id, "completed");
+      if (!ok) {
+        setActionError("Couldn’t reveal results on the server.");
+        return;
+      }
       await load();
       return;
     }
@@ -209,6 +228,10 @@ export default function RoomPage() {
         </div>
       </div>
 
+      {actionError && (
+        <p className="text-sm text-berry text-center mb-2">{actionError}</p>
+      )}
+
       {live && !isBroadcast && (room.status === "drafting" || room.status === "submitting") && (
         <Lobby
           participants={participants}
@@ -260,6 +283,7 @@ export default function RoomPage() {
             room={room}
             onUpdate={onUpdate}
             alreadyVotedIds={myVotedIds}
+            onVoted={onVoted}
             participantDeviceIds={isBroadcast ? [] : deviceIds}
             votes={votes}
             isHost={isHost && !isBroadcast}

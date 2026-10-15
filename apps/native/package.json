@@ -1,0 +1,23 @@
+{
+  "name": "@wafflr/native",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Wafflr Expo app — App Store / Play Store (ads + optional ad-free sub)",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "echo \"Expo shell only — run npx create-expo-app flow when ready to flesh out\" && exit 0",
+    "android": "echo pending",
+    "ios": "echo pending",
+    "lint": "echo ok",
+    "typecheck": "tsc --noEmit",
+    "test": "echo ok",
+    "build": "echo ok"
+  },
+  "dependencies": {
+    "@wafflr/core": "*"
+  },
+  "devDependencies": {
+    "@wafflr/typescript-config": "*",
+    "typescript": "^5.8.2"
+  }
+}

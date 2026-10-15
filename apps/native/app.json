@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Wafflr",
+    "slug": "wafflr",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "wafflr",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.wafflr.decision"
+    },
+    "android": {
+      "package": "app.wafflr.decision",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFF7F2"
+      }
+    },
+    "plugins": []
+  }
+}

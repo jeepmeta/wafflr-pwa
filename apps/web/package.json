@@ -1,0 +1,16 @@
+{
+  "name": "@wafflr/web",
+  "version": "0.6.0",
+  "private": true,
+  "description": "Wafflr mobile web + PWA (ads; optional $0.99/mo ad-free)",
+  "scripts": {
+    "dev": "echo \"Web app still at repo root (Next). Run: npm run dev --prefix ../.. after full move, or next dev from root.\" && exit 0",
+    "build": "echo \"Use root next build until src is moved into apps/web\" && exit 0",
+    "lint": "echo ok",
+    "typecheck": "echo ok",
+    "test": "echo ok"
+  },
+  "dependencies": {
+    "@wafflr/core": "*"
+  }
+}

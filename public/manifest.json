@@ -4,8 +4,8 @@
   "description": "Stop waffling. Start living. Swipe-tournament decisions for groups.",
   "start_url": "/?source=pwa",
   "display": "standalone",
-  "background_color": "#FFFBEB",
-  "theme_color": "#F59E0B",
+  "background_color": "#FFF7F2",
+  "theme_color": "#FFB86C",
   "orientation": "portrait-primary",
   "icons": [
     {

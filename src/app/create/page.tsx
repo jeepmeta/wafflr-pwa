@@ -15,6 +15,7 @@ export default function CreatePage() {
   const [title, setTitle] = useState("");
   const [hostOnly, setHostOnly] = useState(true);
   const [maxCards, setMaxCards] = useState<1 | 2 | 3>(2);
+  const [broadcast, setBroadcast] = useState(false);
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [online, setOnline] = useState(false);
@@ -42,16 +43,16 @@ export default function CreatePage() {
         room = await remoteCreateRoom({
           category,
           title,
-          hostOnlyCards: hostOnly,
+          hostOnlyCards: broadcast ? true : hostOnly,
           maxCardsPerJoiner: maxCards,
+          isBroadcast: broadcast,
         });
         setOnline(Boolean(room));
       }
       if (!room) {
-        room = createRoomDraft(category, title, hostOnly, maxCards);
+        room = createRoomDraft(category, title, hostOnly, maxCards, broadcast);
         setOnline(false);
       }
-      // Host role stuck on this device until purge
       upsertRoom(room, "host");
       setCode(room.code);
       setStep("share");
@@ -147,26 +148,50 @@ export default function CreatePage() {
             ← Back
           </button>
           <h1 className="font-display font-bold text-2xl mb-1">Card setup</h1>
-          <p className="text-muted text-sm mb-6">Who adds the options?</p>
-          <div className="flex flex-col gap-3 mb-6">
-            <button
-              type="button"
-              className={`tile text-left ${hostOnly ? "ring-2 ring-syrup" : ""}`}
-              onClick={() => setHostOnly(true)}
-            >
-              <span className="font-display font-semibold">I&apos;ll make all the cards</span>
-              <span className="block text-xs text-muted mt-1">You build the full list</span>
-            </button>
-            <button
-              type="button"
-              className={`tile text-left ${!hostOnly ? "ring-2 ring-syrup" : ""}`}
-              onClick={() => setHostOnly(false)}
-            >
-              <span className="font-display font-semibold">Let everyone add cards</span>
-              <span className="block text-xs text-muted mt-1">Joiners contribute options</span>
-            </button>
-          </div>
-          {!hostOnly && (
+          <p className="text-muted text-sm mb-4">Who adds the options?</p>
+
+          <button
+            type="button"
+            className={`tile text-left mb-3 ${broadcast ? "ring-2 ring-lavender" : ""}`}
+            onClick={() => {
+              setBroadcast((b) => !b);
+              if (!broadcast) setHostOnly(true);
+            }}
+          >
+            <span className="font-display font-semibold">Broadcast room</span>
+            <span className="block text-xs text-muted mt-1">
+              Mass join · live viewer count · host reveals results (influencer-scale)
+            </span>
+          </button>
+
+          {!broadcast && (
+            <div className="flex flex-col gap-3 mb-6">
+              <button
+                type="button"
+                className={`tile text-left ${hostOnly ? "ring-2 ring-syrup" : ""}`}
+                onClick={() => setHostOnly(true)}
+              >
+                <span className="font-display font-semibold">I'll make all the cards</span>
+                <span className="block text-xs text-muted mt-1">You build the full list</span>
+              </button>
+              <button
+                type="button"
+                className={`tile text-left ${!hostOnly ? "ring-2 ring-syrup" : ""}`}
+                onClick={() => setHostOnly(false)}
+              >
+                <span className="font-display font-semibold">Let everyone add cards</span>
+                <span className="block text-xs text-muted mt-1">Joiners contribute options</span>
+              </button>
+            </div>
+          )}
+
+          {broadcast && (
+            <p className="text-xs text-muted mb-6">
+              Host builds the card list. Joiners only swipe. Results when you reveal.
+            </p>
+          )}
+
+          {!hostOnly && !broadcast && (
             <div className="mb-6">
               <p className="text-sm font-semibold mb-2">Cards per joiner</p>
               <div className="flex gap-2">
@@ -183,7 +208,7 @@ export default function CreatePage() {
               </div>
             </div>
           )}
-          <button type="button" className="btn-match w-full" disabled={creating} onClick={createRoom}>
+          <button type="button" className="btn-match w-full" disabled={creating} onClick={() => void createRoom()}>
             {creating ? "Creating…" : "Create Room!"}
           </button>
         </>
@@ -193,18 +218,22 @@ export default function CreatePage() {
         <>
           <h1 className="font-display font-bold text-2xl mb-1 text-center">Room ready</h1>
           <p className="text-muted text-sm mb-2 text-center">
-            {online ? "Live multiplayer room" : "Local room (offline / no Supabase)"}
+            {online
+              ? broadcast
+                ? "Live broadcast room"
+                : "Live multiplayer room"
+              : "Local room (offline / no Supabase)"}
           </p>
           <div className="card text-center mb-4">
             <p className="room-code">{code.split("").join(" ")}</p>
-            <button type="button" className="btn-ghost mt-3" onClick={copyCode}>
+            <button type="button" className="btn-ghost mt-3" onClick={() => void copyCode()}>
               Copy code
             </button>
           </div>
           <div className="flex justify-center mb-4">
             <QrCode value={joinUrl} size={160} label="Scan to join" />
           </div>
-          <button type="button" className="btn-primary w-full mb-3" onClick={shareRoom}>
+          <button type="button" className="btn-primary w-full mb-3" onClick={() => void shareRoom()}>
             Share link
           </button>
           <Link href={`/room/${code}`} className="btn-match no-underline w-full text-center">

@@ -1,0 +1,21 @@
+{
+  "appId": "app.wafflr.decision",
+  "appName": "Wafflr",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#FFF7F2",
+      "launchAutoHide": true
+    }
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "preferredContentMode": "mobile"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

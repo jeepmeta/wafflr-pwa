@@ -1,6 +1,7 @@
 /**
- * Multiplayer over existing Wafflr Supabase schema.
- * Phase 2–3: device_id membership, votes, multi-device completion, tie-break.
+ * Multiplayer over Wafflr Supabase schema.
+ * Phase 2–3: device membership + votes.
+ * Phase 8: broadcast rooms use aggregate tallies + RPCs.
  */
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -8,6 +9,14 @@ import { getDeviceId, getDisplayName } from "./device";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 import type { Room, RoomCard, RoomCategory, RoomStatus } from "./rooms";
 import { generateCode, pickSkin, ROOM_LIFETIME_MS } from "./rooms";
+import {
+  applyTalliesToCards,
+  fetchMyVotedCardIds,
+  rpcCastVote,
+  rpcJoinBroadcast,
+  rpcRoomSnapshot,
+  type VoteTallies,
+} from "./broadcast";
 
 export type Participant = {
   id: string;
@@ -41,6 +50,9 @@ type DbRoom = {
   };
   created_at: string;
   expires_at: string | null;
+  is_broadcast?: boolean;
+  viewer_count?: number;
+  vote_tallies?: VoteTallies;
 };
 
 type DbParticipant = {
@@ -80,8 +92,13 @@ function tallyCards(cards: RoomCard[], votes: RemoteVote[]): RoomCard[] {
 }
 
 function toRoom(r: DbRoom): Room {
+  const isBroadcast = Boolean(r.is_broadcast);
+  const tallies = r.vote_tallies || {};
+  const raw = Array.isArray(r.item_payload) ? r.item_payload : [];
   const votes = r.state?.votes || [];
-  const cards = tallyCards(Array.isArray(r.item_payload) ? r.item_payload : [], votes);
+  const cards = isBroadcast
+    ? applyTalliesToCards(raw, tallies)
+    : tallyCards(raw, votes);
   const settings = r.settings || {};
   return {
     id: r.id,
@@ -97,6 +114,8 @@ function toRoom(r: DbRoom): Room {
     maxCardsPerJoiner: (Number(settings.max_cards_per_joiner) || 2) as 1 | 2 | 3,
     cards,
     participantIds: [],
+    isBroadcast,
+    viewerCount: r.viewer_count ?? 0,
   };
 }
 
@@ -118,11 +137,12 @@ export function votedCardIdsForDevice(
 ): Set<string> {
   const id = deviceId || getDeviceId();
   return new Set(
-    votes.filter((v) => v.device_id === id && !v.device_id.startsWith("tiebreak:")).map((v) => v.card_id)
+    votes
+      .filter((v) => v.device_id === id && !v.device_id.startsWith("tiebreak:"))
+      .map((v) => v.card_id)
   );
 }
 
-/** Devices that have voted on every card (excludes synthetic tiebreak ids). */
 export function devicesFinishedSwiping(
   votes: RemoteVote[],
   cardIds: string[],
@@ -145,12 +165,14 @@ export async function remoteCreateRoom(input: {
   title: string;
   hostOnlyCards: boolean;
   maxCardsPerJoiner: 1 | 2 | 3;
+  isBroadcast?: boolean;
 }): Promise<Room | null> {
   const sb = getSupabase();
   if (!sb) return null;
   const deviceId = getDeviceId();
   const code = generateCode();
   const expires = new Date(Date.now() + ROOM_LIFETIME_MS).toISOString();
+  const isBroadcast = Boolean(input.isBroadcast);
   const title =
     input.title ||
     (input.category === "eat"
@@ -165,13 +187,17 @@ export async function remoteCreateRoom(input: {
     .from("rooms")
     .insert({
       code,
-      mode: "swipe_match",
+      mode: isBroadcast ? "broadcast_swipe" : "swipe_match",
       status: "lobby",
+      is_broadcast: isBroadcast,
+      viewer_count: 1,
+      vote_tallies: {},
       settings: {
-        host_only_cards: input.hostOnlyCards,
+        host_only_cards: isBroadcast ? true : input.hostOnlyCards,
         max_cards_per_joiner: input.maxCardsPerJoiner,
         allow_anonymous: true,
         require_all_ready: false,
+        broadcast: isBroadcast,
       },
       item_payload: [],
       state: {
@@ -209,6 +235,44 @@ export async function remoteGetByCode(code: string): Promise<{
 } | null> {
   const sb = getSupabase();
   if (!sb) return null;
+
+  // Prefer snapshot RPC (works for broadcast + small rooms)
+  const snap = await rpcRoomSnapshot(code);
+  if (snap) {
+    let myVoted: string[] = [];
+    if (snap.isBroadcast) {
+      myVoted = await fetchMyVotedCardIds(snap.room.id);
+    }
+    let participants: Participant[] = [];
+    if (!snap.isBroadcast) {
+      const { data: parts } = await sb
+        .from("participants")
+        .select("*")
+        .eq("room_id", snap.room.id)
+        .limit(100);
+      participants = ((parts || []) as DbParticipant[]).map(toParticipant);
+      const { data: roomRow } = await sb
+        .from("rooms")
+        .select("state")
+        .eq("id", snap.room.id)
+        .maybeSingle();
+      const votes = ((roomRow?.state as DbRoom["state"])?.votes || []) as RemoteVote[];
+      myVoted = [...votedCardIdsForDevice(votes)];
+      return {
+        room: snap.room,
+        participants,
+        votes,
+        myVotedCardIds: myVoted,
+      };
+    }
+    return {
+      room: snap.room,
+      participants: [],
+      votes: [],
+      myVotedCardIds: myVoted,
+    };
+  }
+
   const { data: room, error } = await sb
     .from("rooms")
     .select("*")
@@ -217,26 +281,40 @@ export async function remoteGetByCode(code: string): Promise<{
     .maybeSingle();
   if (error || !room) return null;
 
+  const db = room as DbRoom;
   const { data: participants } = await sb
     .from("participants")
     .select("*")
-    .eq("room_id", room.id);
+    .eq("room_id", room.id)
+    .limit(db.is_broadcast ? 20 : 100);
 
-  const db = room as DbRoom;
   const votes = db.state?.votes || [];
-  const deviceId = getDeviceId();
+  let myVoted = [...votedCardIdsForDevice(votes)];
+  if (db.is_broadcast) {
+    myVoted = await fetchMyVotedCardIds(db.id);
+  }
+
   return {
     room: toRoom(db),
     participants: ((participants || []) as DbParticipant[]).map(toParticipant),
     votes,
-    myVotedCardIds: [...votedCardIdsForDevice(votes, deviceId)],
+    myVotedCardIds: myVoted,
   };
 }
 
 export async function remoteJoinRoom(code: string): Promise<Room | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  // Fast path for any room via broadcast join RPC (bumps viewer when new)
+  const joined = await rpcJoinBroadcast(code);
+  if (joined?.ok) {
+    const packed = await remoteGetByCode(code);
+    return packed?.room ?? null;
+  }
+
   const packed = await remoteGetByCode(code);
   if (!packed) return null;
-  const sb = getSupabase()!;
   const deviceId = getDeviceId();
   const existing = packed.participants.find((p) => p.device_id === deviceId);
 
@@ -248,15 +326,12 @@ export async function remoteJoinRoom(code: string): Promise<Room | null> {
         last_seen_at: new Date().toISOString(),
       })
       .eq("id", existing.id);
-  } else {
-    const hostRow = await sb.from("rooms").select("state").eq("id", packed.room.id).single();
-    const hostState = hostRow.data?.state as DbRoom["state"] | undefined;
-    const isHost = hostState?.host_device_id === deviceId;
+  } else if (!packed.room.isBroadcast) {
     await sb.from("participants").insert({
       room_id: packed.room.id,
       device_id: deviceId,
       display_name: getDisplayName(),
-      is_host: Boolean(isHost),
+      is_host: false,
       is_ready: false,
     });
   }
@@ -282,10 +357,12 @@ export async function remoteAddCard(
     nah: 0,
   };
   const payload = Array.isArray(db.item_payload) ? [...db.item_payload, card] : [card];
+  const tallies = { ...(db.vote_tallies || {}), [card.id]: { yum: 0, nah: 0 } };
   const { error: upErr } = await sb
     .from("rooms")
     .update({
       item_payload: payload,
+      vote_tallies: tallies,
       status: db.status === "lobby" ? "revealing" : db.status,
       updated_at: new Date().toISOString(),
     })
@@ -313,6 +390,12 @@ export async function remoteVote(
 ) {
   const sb = getSupabase();
   if (!sb) return;
+
+  // Prefer atomic RPC (broadcast + scales for small rooms too)
+  const viaRpc = await rpcCastVote(roomId, cardId, vote);
+  if (viaRpc) return;
+
+  // Fallback: legacy state.votes array
   const { data: room } = await sb.from("rooms").select("state").eq("id", roomId).single();
   if (!room) return;
   const state = (room.state || {}) as DbRoom["state"];
@@ -330,13 +413,22 @@ export async function remoteVote(
     .eq("id", roomId);
 }
 
-/** After a vote, complete the room only if every participant finished all cards. */
 export async function remoteCompleteIfReady(
   roomId: string,
   votes: RemoteVote[],
   cardIds: string[],
   participantDeviceIds: string[]
 ): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { data } = await sb
+    .from("rooms")
+    .select("is_broadcast")
+    .eq("id", roomId)
+    .maybeSingle();
+  // Broadcast rooms: host reveals manually — never auto-complete on one device
+  if (data?.is_broadcast) return false;
+
   const ids = participantDeviceIds.filter(Boolean);
   if (ids.length === 0) {
     await remoteSetStatus(roomId, "completed");
@@ -348,24 +440,13 @@ export async function remoteCompleteIfReady(
   return true;
 }
 
-/** Sudden-death: one extra yum on winner, then completed. */
 export async function remoteBreakTie(roomId: string, winnerCardId: string) {
   const sb = getSupabase();
   if (!sb) return;
-  const { data: room } = await sb.from("rooms").select("state").eq("id", roomId).single();
-  if (!room) return;
-  const state = (room.state || {}) as DbRoom["state"];
-  const deviceId = getDeviceId();
-  const votes = [...(state.votes || [])];
-  votes.push({
-    card_id: winnerCardId,
-    device_id: `tiebreak:${deviceId}`,
-    vote: "yum",
-  });
+  await rpcCastVote(roomId, winnerCardId, "yum");
   await sb
     .from("rooms")
     .update({
-      state: { ...state, votes, tie_broken: true },
       status: "completed",
       updated_at: new Date().toISOString(),
     })
